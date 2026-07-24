@@ -2502,7 +2502,7 @@ export const CARD_CATALOG = [
     "sourceId": 15332,
     "countryId": "united-kingdom",
     "edition": "base",
-    "type": "other",
+    "type": "status",
     "name": "澳大利亚劳管局",
     "description": "当你建设陆军时：可在〈澳大利亚〉征召陆军来代替建设陆军。",
     "image": "cards/15332.webp"
@@ -2512,7 +2512,7 @@ export const CARD_CATALOG = [
     "sourceId": 15333,
     "countryId": "united-kingdom",
     "edition": "base",
-    "type": "other",
+    "type": "status",
     "name": "维克托·霍普宣布印度参战",
     "description": "当你建设陆军时：可在〈印度〉征召陆军来代替建设陆军。",
     "image": "cards/15333.webp"
@@ -2522,7 +2522,7 @@ export const CARD_CATALOG = [
     "sourceId": 15334,
     "countryId": "united-kingdom",
     "edition": "base",
-    "type": "other",
+    "type": "status",
     "name": "麦肯齐·金起草国家资源动员法",
     "description": "在你的计分阶段：若在〈北大西洋〉有英国海军，获得1分；若在〈加拿大〉有英国陆军，获得1分。",
     "image": "cards/15334.webp"
@@ -2532,7 +2532,7 @@ export const CARD_CATALOG = [
     "sourceId": 15335,
     "countryId": "united-kingdom",
     "edition": "base",
-    "type": "other",
+    "type": "status",
     "name": "反法西斯抵抗运动",
     "description": "在你的出牌阶段：可[放弃打出手牌]并弃置2张手牌，在〈西欧〉或〈意大利〉发起陆战。",
     "image": "cards/15335.webp"
@@ -2542,7 +2542,7 @@ export const CARD_CATALOG = [
     "sourceId": 15336,
     "countryId": "united-kingdom",
     "edition": "base",
-    "type": "other",
+    "type": "status",
     "name": "英国皇家海军",
     "description": "每回合限一次，当你发起海战时：可弃置2张手牌，在发起海战的海域或另一个海域发起海战。",
     "image": "cards/15336.webp"
@@ -2792,7 +2792,7 @@ export const CARD_CATALOG = [
     "sourceId": 15424,
     "countryId": "united-kingdom",
     "edition": "total-war",
-    "type": "other",
+    "type": "status",
     "name": "流亡政府",
     "description": "若〈西欧〉被轴心国陆军占领，〈不列颠群岛〉成为法国的大本营",
     "image": "cards/15424.webp"
@@ -2822,7 +2822,7 @@ export const CARD_CATALOG = [
     "sourceId": 15427,
     "countryId": "united-kingdom",
     "edition": "total-war",
-    "type": "other",
+    "type": "status",
     "name": "波兰主权",
     "description": "〈东欧〉成为仅对于英国的补给点。在你的出牌阶段：可[放弃打出手牌]，在〈东欧〉征召英国陆军。",
     "image": "cards/15427.webp"
@@ -2832,7 +2832,7 @@ export const CARD_CATALOG = [
     "sourceId": 15428,
     "countryId": "united-kingdom",
     "edition": "total-war",
-    "type": "other",
+    "type": "status",
     "name": "霍巴特滑稽坦克",
     "description": "在英国的回合中，无视轴心国的【状态卡】。滑稽]",
     "image": "cards/15428.webp"

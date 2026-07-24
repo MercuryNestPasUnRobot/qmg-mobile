@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "offline-assets": "node scripts/generate-offline-assets.mjs",
+    "predev": "npm run offline-assets",
     "dev": "vite",
+    "prebuild": "npm run offline-assets",
     "build": "tsc && vite build --base=./",
     "preview": "vite preview",
     "test": "vitest run",

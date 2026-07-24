@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canMoveUnit, createInitialState, reduceGame } from "./game";
+import { canMoveUnit, createInitialState, normalizeGameState, reduceGame } from "./game";
 import { CARD_CATALOG } from "./generated-card-catalog";
 import { AREAS, MAP_CONNECTIONS, areaById, connectionBetween, countriesForFaction } from "./prototype-data";
 import { GameStore, parseImportedSave, type StorageLike } from "./store";
@@ -128,6 +128,30 @@ describe("prototype game state", () => {
     });
     expect(Object.values(state.cards).every((card) => card.name && card.description && card.image)).toBe(true);
     expect(Object.values(state.cardZones).every((zones) => zones.hand.length === 7)).toBe(true);
+  });
+
+  it("classifies every persistent British card as status and repairs existing saves", () => {
+    const persistentBritishCards = [
+      "澳大利亚劳管局",
+      "维克托·霍普宣布印度参战",
+      "麦肯齐·金起草国家资源动员法",
+      "反法西斯抵抗运动",
+      "英国皇家海军",
+      "流亡政府",
+      "自由法国",
+      "塞内加尔步兵团",
+      "波兰主权",
+      "霍巴特滑稽坦克",
+    ];
+    const catalogCards = CARD_CATALOG.filter(
+      (card) => card.countryId === "united-kingdom" && persistentBritishCards.includes(card.name),
+    );
+    expect(catalogCards).toHaveLength(persistentBritishCards.length);
+    expect(catalogCards.every((card) => card.type === "status")).toBe(true);
+
+    const saved = createInitialState();
+    saved.cards["card-15332"]!.type = "other";
+    expect(normalizeGameState(saved).cards["card-15332"]?.type).toBe("status");
   });
 
   it("places and removes an air force token", () => {

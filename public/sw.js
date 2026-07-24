@@ -1,10 +1,29 @@
-const CACHE_NAME = "qmg-mobile-shell-v5";
-const APP_SHELL = ["./", "./manifest.webmanifest", "./icon.svg", "./maskable-icon.svg"];
+const CACHE_NAME = "qmg-mobile-complete-v6";
+const OFFLINE_MANIFEST = "./offline-assets.json";
+const BATCH_SIZE = 24;
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
+  event.waitUntil(precacheCompleteGame());
   self.skipWaiting();
 });
+
+async function precacheCompleteGame() {
+  const cache = await caches.open(CACHE_NAME);
+  const indexResponse = await fetch("./", { cache: "reload" });
+  if (!indexResponse.ok) throw new Error("Unable to cache app entry");
+  const html = await indexResponse.clone().text();
+  await cache.put("./", indexResponse);
+
+  const linkedAssets = Array.from(html.matchAll(/(?:src|href)="(\.\/[^"]+)"/g), (match) => match[1]);
+  const manifestResponse = await fetch(OFFLINE_MANIFEST, { cache: "no-store" });
+  if (!manifestResponse.ok) throw new Error("Unable to load offline asset manifest");
+  const imageAssets = await manifestResponse.json();
+  const assets = [...new Set(["./manifest.webmanifest", OFFLINE_MANIFEST, ...linkedAssets, ...imageAssets])];
+
+  for (let index = 0; index < assets.length; index += BATCH_SIZE) {
+    await cache.addAll(assets.slice(index, index + BATCH_SIZE));
+  }
+}
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(

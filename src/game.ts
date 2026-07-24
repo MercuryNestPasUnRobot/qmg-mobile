@@ -483,6 +483,7 @@ function normalizeCards(state: GameState): void {
   for (const definition of CARD_CATALOG) {
     const existing = state.cards[definition.id];
     state.cards[definition.id] = {
+      ...existing,
       id: definition.id,
       sourceId: definition.sourceId,
       countryId: definition.countryId,
@@ -492,7 +493,6 @@ function normalizeCards(state: GameState): void {
       edition: definition.edition,
       image: definition.image,
       isCustom: false,
-      ...existing,
     };
     if (!placed.has(definition.id)) {
       state.cardZones[definition.countryId].deck.push(definition.id);

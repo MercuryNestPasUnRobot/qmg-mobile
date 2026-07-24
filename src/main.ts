@@ -723,10 +723,8 @@ function renderBoard(): string {
     <div class="war-table">
       ${renderMap()}
       ${renderCommandRail()}
-      <div class="bottom-console">
-        ${renderAreaDetail()}
-        ${renderHandDock()}
-      </div>
+      ${renderAreaDetail()}
+      ${renderHandDock()}
     </div>
     ${renderCardManager()}
   `;
