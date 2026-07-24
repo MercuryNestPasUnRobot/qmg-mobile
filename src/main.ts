@@ -1,15 +1,20 @@
 import "./styles.css";
-import { PHASES, type CardType, type GameAction } from "./game";
+import { PHASES, canMoveUnit, type CardType, type GameAction } from "./game";
 import {
   AREAS,
   COUNTRIES,
   FACTION_NAMES,
   TURN_ORDER,
   areaById,
+  connectionDisplayKind,
+  connectionsForArea,
   countriesForFaction,
   countryById,
+  otherEnd,
   type CountryId,
   type Faction,
+  type MapConnection,
+  type MapPoint,
   type UnitKind,
 } from "./prototype-data";
 import { GameStore } from "./store";
@@ -30,7 +35,9 @@ const app: HTMLDivElement = appElement;
 
 const store = new GameStore(window.localStorage);
 let currentView: ViewId = "map";
-let selectedAreaId = "western-europe";
+let selectedAreaId = "germany";
+let mapWidth = 980;
+let mapScrollLeft = 190;
 let toastMessage = "";
 let toastTimer: number | undefined;
 let privacyGate: PrivacyGate | null = {
@@ -56,6 +63,8 @@ const VIEW_ITEMS: ReadonlyArray<{ id: ViewId; icon: string; label: string }> = [
   { id: "log", icon: "≡", label: "日志" },
   { id: "save", icon: "↥", label: "存档" },
 ];
+
+const MAP_IMAGE_URL = `${import.meta.env.BASE_URL}qmg-map.png`;
 
 function escapeHtml(value: string): string {
   return value.replace(
@@ -189,9 +198,13 @@ function renderAreaDetail(): string {
   const definition = areaById(selectedAreaId);
   const area = state.areas[selectedAreaId]!;
   const compatibleKind: UnitKind = definition.kind === "land" ? "army" : "navy";
-  const neighbors = definition.neighbors
-    .map(areaById)
-    .filter((neighbor) => neighbor.kind === definition.kind);
+  const connections = connectionsForArea(definition.id);
+  const movementConnections = connections.filter(
+    (connection) => areaById(otherEnd(connection, definition.id)).kind === definition.kind,
+  );
+  const coastConnections = connections.filter(
+    (connection) => areaById(otherEnd(connection, definition.id)).kind !== definition.kind,
+  );
   const stacks = area.units;
   const stackOptions = stacks
     .map(
@@ -207,11 +220,43 @@ function renderAreaDetail(): string {
       <div class="section-heading">
         <div>
           <p class="eyebrow">${definition.kind === "land" ? "陆地区域" : "海域"}</p>
-          <h2>${definition.name}</h2>
+          <h2>${definition.name}${definition.supply ? ' <span class="supply-star" title="补给区域">★</span>' : ""}</h2>
         </div>
         <span class="count-pill">${stacks.reduce((sum, stack) => sum + stack.count, 0)} 单位</span>
       </div>
-      <p class="neighbor-line">相邻：${definition.neighbors.map((id) => areaById(id).name).join("、")}</p>
+      <div class="connection-summary">
+        <div>
+          <strong>${definition.kind === "land" ? "同陆地相邻" : "同海域相邻"}</strong>
+          <p>${
+            movementConnections.length
+              ? movementConnections
+                  .map((connection) => {
+                    const neighbor = areaById(otherEnd(connection, definition.id));
+                    if (connection.kind !== "strait") return neighbor.name;
+                    const controller = areaById(connection.controller!);
+                    const sampleCountry = countriesForFaction(state.activeFaction)[0]!;
+                    const open = canMoveUnit(
+                      state,
+                      definition.id,
+                      neighbor.id,
+                      sampleCountry.id,
+                      compatibleKind,
+                    );
+                    return `${neighbor.name}（海峡·${controller.name}控制，当前${open ? "开放" : "关闭"}）`;
+                  })
+                  .join("、")
+              : "无"
+          }</p>
+        </div>
+        <div>
+          <strong>陆海沿岸相邻</strong>
+          <p>${
+            coastConnections.length
+              ? coastConnections.map((connection) => areaById(otherEnd(connection, definition.id)).name).join("、")
+              : "无"
+          }</p>
+        </div>
+      </div>
       <div class="detail-units">
         ${stacks.length ? stacks.map(renderUnitStack).join("") : '<p class="empty-inline">这里还没有单位</p>'}
       </div>
@@ -238,11 +283,18 @@ function renderAreaDetail(): string {
         </label>
         <label>
           <span>到相邻区域</span>
-          <select name="toAreaId" ${neighbors.length ? "" : "disabled"}>
-            ${neighbors.map((neighbor) => `<option value="${neighbor.id}">${neighbor.name}</option>`).join("") || "<option>无可用区域</option>"}
+          <select name="toAreaId" ${movementConnections.length ? "" : "disabled"}>
+            ${
+              movementConnections
+                .map((connection) => {
+                  const neighbor = areaById(otherEnd(connection, definition.id));
+                  return `<option value="${neighbor.id}">${neighbor.name}${connection.kind === "strait" ? " · 海峡" : ""}</option>`;
+                })
+                .join("") || "<option>无可用区域</option>"
+            }
           </select>
         </label>
-        <button class="button" type="submit" ${stacks.length && neighbors.length ? "" : "disabled"}>移动 1 支</button>
+        <button class="button" type="submit" ${stacks.length && movementConnections.length ? "" : "disabled"}>移动 1 支</button>
       </form>
 
       <form class="action-form action-form--remove" id="remove-unit-form">
@@ -257,32 +309,89 @@ function renderAreaDetail(): string {
   `;
 }
 
+function closestPoints(a: readonly MapPoint[], b: readonly MapPoint[]): [MapPoint, MapPoint] {
+  let best: [MapPoint, MapPoint] = [a[0]!, b[0]!];
+  let distance = Number.POSITIVE_INFINITY;
+  for (const first of a) {
+    for (const second of b) {
+      const candidate = (first.x - second.x) ** 2 + (first.y - second.y) ** 2;
+      if (candidate < distance) {
+        best = [first, second];
+        distance = candidate;
+      }
+    }
+  }
+  return best;
+}
+
+function renderConnectionLine(connection: MapConnection): string {
+  const a = areaById(connection.a);
+  const b = areaById(connection.b);
+  const [from, to] = closestPoints(a.points, b.points);
+  const displayKind = connectionDisplayKind(connection);
+  return `<line class="map-link map-link--${displayKind}" x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" />`;
+}
+
+function renderMapNode(areaId: string, point: MapPoint, duplicateIndex: number): string {
+  const definition = areaById(areaId);
+  const area = store.state.areas[areaId]!;
+  const units = area.units.reduce((sum, stack) => sum + stack.count, 0);
+  const selected = areaId === selectedAreaId;
+  const neighboring = connectionsForArea(selectedAreaId).some(
+    (connection) => otherEnd(connection, selectedAreaId) === areaId,
+  );
+  return `
+    <button
+      class="map-node map-node--${definition.kind} ${selected ? "is-selected" : ""} ${neighboring ? "is-neighbor" : ""}"
+      style="--map-x:${point.x}%;--map-y:${point.y}%"
+      data-action="select-area"
+      data-area-id="${definition.id}"
+      data-map-node="${definition.id}-${duplicateIndex}"
+      aria-label="${definition.name}${units ? `，${units}个单位` : ""}"
+      title="${definition.name}"
+    >
+      <span class="map-node__symbol" aria-hidden="true">${definition.kind === "land" ? "▲" : "◆"}</span>
+      <span class="map-node__name">${definition.name}</span>
+      ${definition.supply ? '<span class="map-node__supply" aria-label="补给区域">★</span>' : ""}
+      ${units ? `<span class="map-node__count">${units}</span>` : ""}
+    </button>
+  `;
+}
+
 function renderMap(): string {
-  const state = store.state;
+  const selectedConnections = connectionsForArea(selectedAreaId);
   return `
     <section class="view-section">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">简化战区</p>
-          <h2>区域与单位</h2>
+          <p class="eyebrow">规则地图 · 原型适配</p>
+          <h2>世界地图与区域</h2>
         </div>
-        <div class="map-legend"><span>▲ 陆军</span><span>◆ 海军</span></div>
+        <div class="map-tools" aria-label="地图缩放">
+          <button class="icon-button icon-button--small" data-action="map-zoom" data-width="760" aria-label="缩小地图">−</button>
+          <button class="icon-button icon-button--small" data-action="map-zoom" data-width="0" aria-label="地图适应宽度">适</button>
+          <button class="icon-button icon-button--small" data-action="map-zoom" data-width="1220" aria-label="放大地图">＋</button>
+        </div>
       </div>
-      <p class="section-intro">点选区域后，可放置、移动或移除单位。原型只限制地形与相邻移动。</p>
-      <div class="area-grid">
-        ${AREAS.map((definition) => {
-          const area = state.areas[definition.id]!;
-          return `
-            <button class="area-card ${definition.id === selectedAreaId ? "is-selected" : ""}" data-action="select-area" data-area-id="${definition.id}">
-              <span class="area-card__type">${definition.kind === "land" ? "LAND" : "SEA"}</span>
-              <strong>${definition.name}</strong>
-              <span class="area-card__units">
-                ${area.units.length ? area.units.map(renderUnitStack).join("") : '<span class="empty-inline">空</span>'}
-              </span>
-            </button>
-          `;
-        }).join("")}
+      <p class="section-intro">横向拖动查看地图，点选圆点查看区域。高亮连线只显示当前区域的连接。</p>
+      <div class="map-legend map-legend--routes">
+        <span><i class="legend-swatch legend-swatch--land"></i>陆路</span>
+        <span><i class="legend-swatch legend-swatch--sea"></i>海路</span>
+        <span><i class="legend-swatch legend-swatch--coast"></i>沿岸</span>
+        <span><i class="legend-swatch legend-swatch--strait"></i>受控海峡</span>
       </div>
+      <div class="map-viewport" tabindex="0" aria-label="可横向拖动的世界地图">
+        <div class="map-canvas ${mapWidth === 0 ? "map-canvas--fit" : ""}" style="width:${mapWidth === 0 ? "100%" : `${mapWidth}px`}">
+          <img class="map-image" src="${MAP_IMAGE_URL}" width="3366" height="1803" alt="Quartermaster General 世界地图" draggable="false" />
+          <svg class="map-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            ${selectedConnections.map(renderConnectionLine).join("")}
+          </svg>
+          ${AREAS.flatMap((definition) =>
+            definition.points.map((point, index) => renderMapNode(definition.id, point, index)),
+          ).join("")}
+        </div>
+      </div>
+      <p class="map-rule-note">规则依据：共享边界才算相邻；只在一点接触不算。中东与巴尔干、黑海与地中海明确不相邻。东西地图边缘首尾相接。</p>
       ${renderAreaDetail()}
     </section>
   `;
@@ -553,6 +662,8 @@ function render(): void {
       ${toastMessage ? `<div class="toast" role="status">${escapeHtml(toastMessage)}</div>` : ""}
     </div>
   `;
+  const viewport = app.querySelector<HTMLElement>(".map-viewport");
+  if (viewport) viewport.scrollLeft = mapWidth === 0 ? 0 : mapScrollLeft;
 }
 
 function parseStack(value: string): { countryId: CountryId; kind: UnitKind } {
@@ -585,9 +696,18 @@ app.addEventListener("click", (event) => {
     return;
   }
   if (action === "select-area") {
+    mapScrollLeft = button.closest<HTMLElement>(".map-viewport")?.scrollLeft ?? mapScrollLeft;
     selectedAreaId = button.dataset.areaId ?? selectedAreaId;
     render();
     document.querySelector(".area-detail")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  if (action === "map-zoom") {
+    const viewport = button.closest(".view-section")?.querySelector<HTMLElement>(".map-viewport");
+    if (viewport) mapScrollLeft = viewport.scrollLeft;
+    mapWidth = Number(button.dataset.width);
+    if (mapWidth === 0) mapScrollLeft = 0;
+    render();
     return;
   }
   if (action === "switch-faction") {
@@ -638,7 +758,8 @@ app.addEventListener("click", (event) => {
     if (!window.confirm("开始新游戏会替换当前浏览器存档。建议先导出 JSON，是否继续？")) return;
     store.newGame();
     currentView = "map";
-    selectedAreaId = "western-europe";
+    selectedAreaId = "germany";
+    mapScrollLeft = 190;
     askForFaction("axis", "新战局已就绪", "由德国开始。请把手机交给 Axis 轴心国玩家。", () => undefined, false);
     return;
   }
@@ -683,6 +804,17 @@ app.addEventListener("click", (event) => {
     document.querySelector<HTMLInputElement>("#import-file")?.click();
   }
 });
+
+app.addEventListener(
+  "scroll",
+  (event) => {
+    const target = event.target;
+    if (target instanceof HTMLElement && target.classList.contains("map-viewport")) {
+      mapScrollLeft = target.scrollLeft;
+    }
+  },
+  true,
+);
 
 app.addEventListener("change", (event) => {
   const target = event.target as HTMLInputElement | HTMLSelectElement;

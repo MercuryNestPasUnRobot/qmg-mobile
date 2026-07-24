@@ -3,6 +3,7 @@ import {
   COUNTRIES,
   TURN_ORDER,
   areaById,
+  connectionBetween,
   countryById,
   prototypeCardsFor,
   type CountryId,
@@ -11,8 +12,9 @@ import {
 } from "./prototype-data";
 
 export const SAVE_VERSION = 1;
-export const PHASES = ["开始", "部署", "行动", "战斗", "补给", "抽牌"] as const;
-export type Phase = (typeof PHASES)[number];
+export const PHASES = ["开始", "出牌", "空军（Total War）", "补给", "计分", "弃牌", "抽牌"] as const;
+const LEGACY_PHASES = ["部署", "行动", "战斗"] as const;
+export type Phase = (typeof PHASES)[number] | (typeof LEGACY_PHASES)[number];
 export type CardType = "build" | "event" | "response" | "status" | "other";
 
 export interface UnitStack {
@@ -141,6 +143,32 @@ function requireCompatibleArea(areaId: string, kind: UnitKind): void {
   if (kind === "navy" && area.kind !== "sea") throw new Error("海军只能位于海域");
 }
 
+function isStraitOpen(state: GameState, controllerId: string, countryId: CountryId): boolean {
+  const controller = state.areas[controllerId];
+  if (!controller) return false;
+  const axisControls = controller.units.some(
+    (stack) => stack.kind === "army" && stack.count > 0 && countryById(stack.countryId).faction === "axis",
+  );
+  return countryById(countryId).faction === "axis" ? axisControls : !axisControls;
+}
+
+export function canMoveUnit(
+  state: GameState,
+  fromAreaId: string,
+  toAreaId: string,
+  countryId: CountryId,
+  kind: UnitKind,
+): boolean {
+  const from = areaById(fromAreaId);
+  const to = areaById(toAreaId);
+  if (from.kind !== to.kind) return false;
+  if ((kind === "army" && from.kind !== "land") || (kind === "navy" && from.kind !== "sea")) return false;
+  const connection = connectionBetween(fromAreaId, toAreaId);
+  if (!connection) return false;
+  if (connection.kind === "border") return true;
+  return kind === "navy" && Boolean(connection.controller) && isStraitOpen(state, connection.controller!, countryId);
+}
+
 export function describeAction(action: GameAction, state: GameState): string {
   switch (action.type) {
     case "SWITCH_FACTION":
@@ -185,7 +213,7 @@ export function reduceGame(state: GameState, action: GameAction, now = new Date(
       next.turnCountry = action.countryId;
       break;
     case "SET_PHASE":
-      if (!PHASES.includes(action.phase)) throw new Error("无效阶段");
+      if (!(PHASES as readonly string[]).includes(action.phase)) throw new Error("无效阶段");
       next.phase = action.phase;
       break;
     case "END_TURN": {
@@ -211,8 +239,12 @@ export function reduceGame(state: GameState, action: GameAction, now = new Date(
     case "MOVE_UNIT": {
       requireCompatibleArea(action.fromAreaId, action.kind);
       requireCompatibleArea(action.toAreaId, action.kind);
-      const fromDefinition = areaById(action.fromAreaId);
-      if (!fromDefinition.neighbors.includes(action.toAreaId)) throw new Error("只能移动到相邻区域");
+      const connection = connectionBetween(action.fromAreaId, action.toAreaId);
+      if (!connection) throw new Error("只能移动到相邻区域");
+      if (!canMoveUnit(next, action.fromAreaId, action.toAreaId, action.countryId, action.kind)) {
+        if (connection.kind === "strait") throw new Error("该阵营目前不能通过此海峡");
+        throw new Error("单位只能在相同地形的相邻区域间移动");
+      }
       const from = next.areas[action.fromAreaId];
       const to = next.areas[action.toAreaId];
       if (!from || !to) throw new Error("区域不存在");
@@ -284,6 +316,41 @@ export function appendUndoLog(state: GameState, actionDescription: string, now =
   return next;
 }
 
+const LEGACY_AREA_MAPPINGS: Readonly<Record<string, string>> = {
+  atlantic: "north-atlantic",
+  pacific: "central-pacific",
+  arctic: "north-pacific",
+  china: "eastern-china",
+  "central-asia": "kazakhstan",
+};
+
+function mergeAreaUnits(target: AreaState, source: AreaState): void {
+  for (const sourceStack of source.units) {
+    const targetStack = target.units.find(
+      (stack) => stack.countryId === sourceStack.countryId && stack.kind === sourceStack.kind,
+    );
+    if (targetStack) targetStack.count += sourceStack.count;
+    else target.units.push(structuredClone(sourceStack));
+  }
+}
+
+export function normalizeGameState(state: GameState): GameState {
+  const normalized = cloneState(state);
+  for (const area of AREAS) {
+    if (!normalized.areas[area.id]) normalized.areas[area.id] = { id: area.id, units: [] };
+  }
+  for (const [legacyId, targetId] of Object.entries(LEGACY_AREA_MAPPINGS)) {
+    const legacy = normalized.areas[legacyId];
+    const target = normalized.areas[targetId];
+    if (legacy && target && legacy !== target) mergeAreaUnits(target, legacy);
+    delete normalized.areas[legacyId];
+  }
+  if ((LEGACY_PHASES as readonly string[]).includes(normalized.phase)) {
+    normalized.phase = "出牌";
+  }
+  return normalized;
+}
+
 export function isGameState(value: unknown): value is GameState {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<GameState>;
@@ -293,7 +360,7 @@ export function isGameState(value: unknown): value is GameState {
     typeof candidate.turnCountry !== "string" ||
     !TURN_ORDER.includes(candidate.turnCountry as CountryId) ||
     typeof candidate.turnNumber !== "number" ||
-    !PHASES.includes(candidate.phase as Phase) ||
+    ![...PHASES, ...LEGACY_PHASES].includes(candidate.phase as Phase) ||
     typeof candidate.nextLogId !== "number" ||
     typeof candidate.nextCustomCardId !== "number" ||
     typeof candidate.updatedAt !== "string" ||

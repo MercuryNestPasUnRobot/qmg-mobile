@@ -3,6 +3,7 @@ import {
   createInitialState,
   describeAction,
   isGameState,
+  normalizeGameState,
   reduceGame,
   SAVE_VERSION,
   type GameAction,
@@ -55,9 +56,9 @@ export function parseImportedSave(text: string): GameState {
     throw new Error("JSON 格式无效");
   }
 
-  if (isGameState(parsed)) return parsed;
+  if (isGameState(parsed)) return normalizeGameState(parsed);
   if (parsed && typeof parsed === "object" && isGameState((parsed as Partial<ExportedSave>).state)) {
-    return (parsed as ExportedSave).state;
+    return normalizeGameState((parsed as ExportedSave).state);
   }
   throw new Error("这不是兼容的 QMG Mobile 存档");
 }
@@ -78,11 +79,11 @@ export class GameStore {
       if (!raw) return;
       const saved: unknown = JSON.parse(raw);
       if (!isStoredSession(saved)) return;
-      this.state = saved.state;
+      this.state = normalizeGameState(saved.state);
       this.history = saved.history.filter(
         (entry): entry is HistoryEntry =>
           Boolean(entry) && typeof entry.description === "string" && isGameState(entry.state),
-      );
+      ).map((entry) => ({ ...entry, state: normalizeGameState(entry.state) }));
     } catch {
       // Corrupt or unavailable storage falls back to a fresh local game.
     }

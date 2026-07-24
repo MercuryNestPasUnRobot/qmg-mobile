@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createInitialState, reduceGame } from "./game";
-import { countriesForFaction } from "./prototype-data";
+import { canMoveUnit, createInitialState, reduceGame } from "./game";
+import { AREAS, MAP_CONNECTIONS, areaById, connectionBetween, countriesForFaction } from "./prototype-data";
 import { GameStore, parseImportedSave, type StorageLike } from "./store";
 
 class MemoryStorage implements StorageLike {
@@ -34,20 +34,20 @@ describe("prototype game state", () => {
     state = reduceGame(state, {
       type: "MOVE_UNIT",
       fromAreaId: "western-europe",
-      toAreaId: "eastern-europe",
+      toAreaId: "germany",
       countryId: "germany",
       kind: "army",
     });
     expect(state.areas["western-europe"]?.units).toHaveLength(0);
-    expect(state.areas["eastern-europe"]?.units[0]?.count).toBe(1);
+    expect(state.areas.germany?.units[0]?.count).toBe(1);
 
     state = reduceGame(state, {
       type: "REMOVE_UNIT",
-      areaId: "eastern-europe",
+      areaId: "germany",
       countryId: "germany",
       kind: "army",
     });
-    expect(state.areas["eastern-europe"]?.units).toHaveLength(0);
+    expect(state.areas.germany?.units).toHaveLength(0);
   });
 
   it("rejects invalid unit terrain and non-adjacent movement", () => {
@@ -55,11 +55,46 @@ describe("prototype game state", () => {
     expect(() =>
       reduceGame(state, {
         type: "PLACE_UNIT",
-        areaId: "atlantic",
+        areaId: "north-atlantic",
         countryId: "germany",
         kind: "army",
       }),
     ).toThrow("陆军只能位于陆地区域");
+  });
+
+  it("keeps every map connection valid and the two point-contact exceptions disconnected", () => {
+    const ids = new Set(AREAS.map((area) => area.id));
+    const pairs = new Set<string>();
+    for (const connection of MAP_CONNECTIONS) {
+      expect(ids.has(connection.a)).toBe(true);
+      expect(ids.has(connection.b)).toBe(true);
+      const pair = [connection.a, connection.b].sort().join("|");
+      expect(pairs.has(pair)).toBe(false);
+      pairs.add(pair);
+      if (connection.kind === "strait") {
+        expect(areaById(connection.a).kind).toBe("sea");
+        expect(areaById(connection.b).kind).toBe("sea");
+        expect(areaById(connection.controller!).kind).toBe("land");
+      }
+    }
+    expect(connectionBetween("middle-east", "balkans")).toBeUndefined();
+    expect(connectionBetween("black-sea", "mediterranean")).toBeUndefined();
+    expect(connectionBetween("east-pacific", "southeast-pacific")?.kind).toBe("border");
+  });
+
+  it("opens controlled straits to exactly one faction", () => {
+    let state = createInitialState();
+    expect(canMoveUnit(state, "north-atlantic", "mediterranean", "united-kingdom", "navy")).toBe(true);
+    expect(canMoveUnit(state, "north-atlantic", "mediterranean", "germany", "navy")).toBe(false);
+
+    state = reduceGame(state, {
+      type: "PLACE_UNIT",
+      areaId: "north-africa",
+      countryId: "germany",
+      kind: "army",
+    });
+    expect(canMoveUnit(state, "north-atlantic", "mediterranean", "united-kingdom", "navy")).toBe(false);
+    expect(canMoveUnit(state, "north-atlantic", "mediterranean", "germany", "navy")).toBe(true);
   });
 
   it("draws and discards cards into the correct country's private zones", () => {
