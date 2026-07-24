@@ -1,5 +1,5 @@
 import "./styles.css";
-import { PHASES, canMoveUnit, type CardType, type GameAction } from "./game";
+import { PHASES, canMoveUnit, type Card, type CardType, type GameAction, type UnitStack } from "./game";
 import {
   AREAS,
   COUNTRIES,
@@ -19,7 +19,7 @@ import {
 } from "./prototype-data";
 import { GameStore } from "./store";
 
-type ViewId = "map" | "cards" | "score" | "log" | "save";
+type ViewId = "board" | "log" | "save";
 
 interface PrivacyGate {
   target: Faction;
@@ -34,10 +34,12 @@ if (!appElement) throw new Error("App root not found");
 const app: HTMLDivElement = appElement;
 
 const store = new GameStore(window.localStorage);
-let currentView: ViewId = "map";
+let currentView: ViewId = "board";
 let selectedAreaId = "germany";
 let mapWidth = 980;
 let mapScrollLeft = 190;
+let handCountryId: CountryId = countriesForFaction(store.state.activeFaction)[0]!.id;
+let selectedCardId: string | null = null;
 let toastMessage = "";
 let toastTimer: number | undefined;
 let privacyGate: PrivacyGate | null = {
@@ -50,16 +52,21 @@ let privacyGate: PrivacyGate | null = {
 
 const CARD_TYPE_NAMES: Record<CardType, string> = {
   build: "建军",
+  "build-army": "建设陆军",
+  "build-navy": "建设海军",
+  "land-battle": "陆战",
+  "sea-battle": "海战",
+  economic: "经济战",
   event: "事件",
   response: "响应",
   status: "持续",
+  "air-power": "空中力量",
+  bolster: "增强",
   other: "其他",
 };
 
 const VIEW_ITEMS: ReadonlyArray<{ id: ViewId; icon: string; label: string }> = [
-  { id: "map", icon: "⌖", label: "地图" },
-  { id: "cards", icon: "▤", label: "手牌" },
-  { id: "score", icon: "★", label: "计分" },
+  { id: "board", icon: "⌖", label: "战局" },
   { id: "log", icon: "≡", label: "日志" },
   { id: "save", icon: "↥", label: "存档" },
 ];
@@ -141,21 +148,37 @@ function renderHeader(): string {
   return `
     <header class="app-header">
       <div>
-        <p class="eyebrow">QMG · 本地战局</p>
-        <h1>随身军需官</h1>
+        <p class="eyebrow">QMG · WAR TABLE</p>
+        <h1>战场军需官</h1>
       </div>
       <div class="header-actions">
         <button class="icon-button" data-action="undo" ${store.canUndo() ? "" : "disabled"} aria-label="撤销上一步" title="撤销">↶</button>
         <button class="icon-button" data-action="new-game" aria-label="新游戏" title="新游戏">＋</button>
       </div>
     </header>
-    <section class="turn-card" aria-label="当前回合">
-      <div class="turn-card__top">
+    <section class="command-deck" aria-label="当前战局">
+      <div class="command-deck__status">
         <div>
-          <span class="muted">第 ${state.turnNumber} 轮</span>
+          <span class="command-deck__round">ROUND ${state.turnNumber}</span>
           <strong><span class="country-dot" style="--country-color:${turnCountry.color}"></span>${turnCountry.name}</strong>
         </div>
         ${factionBadge(state.activeFaction)}
+      </div>
+      <div class="score-strip" aria-label="胜利点">
+        ${(["axis", "allies"] as const)
+          .map(
+            (faction) => `
+              <article class="score-chip score-chip--${faction}">
+                <span>${faction === "axis" ? "AXIS" : "ALLIES"}</span>
+                <strong>${state.victoryPoints[faction]}</strong>
+                <div>
+                  <button data-action="adjust-vp" data-faction="${faction}" data-amount="-1" aria-label="${faction}减一分">−</button>
+                  <button data-action="adjust-vp" data-faction="${faction}" data-amount="1" aria-label="${faction}加一分">＋</button>
+                </div>
+              </article>
+            `,
+          )
+          .join("")}
       </div>
       <div class="switcher" aria-label="查看阵营">
         <button class="${state.activeFaction === "axis" ? "is-active" : ""}" data-action="switch-faction" data-faction="axis">Axis</button>
@@ -178,17 +201,43 @@ function renderHeader(): string {
           </select>
         </label>
       </div>
-      <button class="button button--turn" data-action="end-turn">结束本国回合 →</button>
+      <button class="button button--turn" data-action="end-turn">结束${turnCountry.name}回合 →</button>
     </section>
   `;
 }
 
-function renderUnitStack(stack: { countryId: CountryId; kind: UnitKind; count: number }): string {
+function unitName(kind: UnitKind): string {
+  if (kind === "army") return "陆军";
+  if (kind === "navy") return "海军";
+  return "空军";
+}
+
+function unitIcon(kind: UnitKind): string {
+  if (kind === "army") {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19h14l-1.6-6.4A5.6 5.6 0 0 0 12 8a5.6 5.6 0 0 0-5.4 4.6L5 19Zm7-12V4m-3 2h6"/></svg>';
+  }
+  if (kind === "navy") {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15h18l-3 5H7l-4-5Zm5-1V8h8v6m-5-6V4h3v4"/></svg>';
+  }
+  return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 13 7-2 2-8 2 8 7 2-7 2-2 6-2-6-7-2Z"/></svg>';
+}
+
+function renderUnitStack(stack: UnitStack): string {
   const country = countryById(stack.countryId);
   return `
     <span class="unit-chip" style="--unit-color:${country.color}">
-      <span aria-hidden="true">${stack.kind === "army" ? "▲" : "◆"}</span>
-      ${country.shortName} ${stack.kind === "army" ? "陆" : "海"} ×${stack.count}
+      <span class="unit-chip__icon">${unitIcon(stack.kind)}</span>
+      ${country.shortName} ${unitName(stack.kind)} ×${stack.count}
+    </span>
+  `;
+}
+
+function renderMapToken(stack: UnitStack): string {
+  const country = countryById(stack.countryId);
+  return `
+    <span class="map-token map-token--${stack.kind}" style="--token-color:${country.color}" title="${country.name}${unitName(stack.kind)} ×${stack.count}">
+      ${unitIcon(stack.kind)}
+      ${stack.count > 1 ? `<b>${stack.count}</b>` : ""}
     </span>
   `;
 }
@@ -206,12 +255,15 @@ function renderAreaDetail(): string {
     (connection) => areaById(otherEnd(connection, definition.id)).kind !== definition.kind,
   );
   const stacks = area.units;
+  const initialMoveKind = stacks[0]?.kind ?? compatibleKind;
+  const moveTargets =
+    initialMoveKind === "air-force"
+      ? AREAS.filter((candidate) => candidate.id !== definition.id)
+      : movementConnections.map((connection) => areaById(otherEnd(connection, definition.id)));
   const stackOptions = stacks
     .map(
       (stack) =>
-        `<option value="${stack.countryId}|${stack.kind}">${countryById(stack.countryId).name} · ${
-          stack.kind === "army" ? "陆军" : "海军"
-        } ×${stack.count}</option>`,
+        `<option value="${stack.countryId}|${stack.kind}">${countryById(stack.countryId).name} · ${unitName(stack.kind)} ×${stack.count}</option>`,
     )
     .join("");
 
@@ -263,13 +315,19 @@ function renderAreaDetail(): string {
 
       <form class="action-form" id="place-unit-form">
         <input type="hidden" name="areaId" value="${definition.id}" />
-        <input type="hidden" name="kind" value="${compatibleKind}" />
         <label>
-          <span>放置${compatibleKind === "army" ? "陆军" : "海军"}</span>
+          <span>国家</span>
           <select name="countryId">
             ${countriesForFaction(state.activeFaction)
               .map((country) => `<option value="${country.id}">${country.name}</option>`)
               .join("")}
+          </select>
+        </label>
+        <label>
+          <span>单位</span>
+          <select name="kind">
+            <option value="${compatibleKind}">${unitName(compatibleKind)}</option>
+            <option value="air-force">空军</option>
           </select>
         </label>
         <button class="button button--primary" type="submit">＋ 放置</button>
@@ -283,18 +341,15 @@ function renderAreaDetail(): string {
         </label>
         <label>
           <span>到相邻区域</span>
-          <select name="toAreaId" ${movementConnections.length ? "" : "disabled"}>
+          <select name="toAreaId" ${moveTargets.length ? "" : "disabled"}>
             ${
-              movementConnections
-                .map((connection) => {
-                  const neighbor = areaById(otherEnd(connection, definition.id));
-                  return `<option value="${neighbor.id}">${neighbor.name}${connection.kind === "strait" ? " · 海峡" : ""}</option>`;
-                })
+              moveTargets
+                .map((neighbor) => `<option value="${neighbor.id}">${neighbor.name}</option>`)
                 .join("") || "<option>无可用区域</option>"
             }
           </select>
         </label>
-        <button class="button" type="submit" ${stacks.length && movementConnections.length ? "" : "disabled"}>移动 1 支</button>
+        <button class="button" type="submit" ${stacks.length && moveTargets.length ? "" : "disabled"}>移动 1 支</button>
       </form>
 
       <form class="action-form action-form--remove" id="remove-unit-form">
@@ -353,7 +408,7 @@ function renderMapNode(areaId: string, point: MapPoint, duplicateIndex: number):
       <span class="map-node__symbol" aria-hidden="true">${definition.kind === "land" ? "▲" : "◆"}</span>
       <span class="map-node__name">${definition.name}</span>
       ${definition.supply ? '<span class="map-node__supply" aria-label="补给区域">★</span>' : ""}
-      ${units ? `<span class="map-node__count">${units}</span>` : ""}
+      ${area.units.length ? `<span class="map-node__tokens">${area.units.map(renderMapToken).join("")}</span>` : ""}
     </button>
   `;
 }
@@ -397,113 +452,164 @@ function renderMap(): string {
   `;
 }
 
-function renderCardCountry(countryId: CountryId): string {
-  const state = store.state;
-  const country = countryById(countryId);
-  const zones = state.cardZones[countryId];
+function cardImageUrl(card: Card): string {
+  return card.image ? `${import.meta.env.BASE_URL}${card.image}` : "";
+}
+
+function renderCardFace(card: Card, className: string): string {
+  const image = cardImageUrl(card);
+  if (image) {
+    return `<img class="${className}" src="${image}" width="384" height="512" loading="lazy" alt="${escapeHtml(card.name)}牌面" />`;
+  }
   return `
-    <article class="country-hand" style="--country-color:${country.color}">
-      <div class="country-hand__header">
-        <div>
-          <p class="eyebrow">${country.shortName} · ${country.faction.toUpperCase()}</p>
-          <h3>${country.name}</h3>
+    <div class="${className} card-face-placeholder" style="--card-country:${countryById(card.countryId).color}">
+      <span>${CARD_TYPE_NAMES[card.type]}</span>
+      <strong>${escapeHtml(card.name)}</strong>
+    </div>
+  `;
+}
+
+function renderCardInspector(card: Card, countryId: CountryId): string {
+  const zones = store.state.cardZones[countryId];
+  const inHand = zones.hand.includes(card.id);
+  const zone = inHand ? "手牌" : zones.discard.includes(card.id) ? "弃牌堆" : zones.deck.includes(card.id) ? "牌堆" : "自定义";
+  return `
+    <article class="card-inspector panel" style="--country-color:${countryById(card.countryId).color}">
+      <div class="card-inspector__image">${renderCardFace(card, "card-face-large")}</div>
+      <div class="card-inspector__copy">
+        <div class="card-meta">
+          <span>${CARD_TYPE_NAMES[card.type]}</span>
+          <span>${card.edition === "total-war" ? "TOTAL WAR" : card.edition === "base" ? "基础版" : "自定义"}</span>
+          <span>${zone}</span>
         </div>
-        <div class="deck-counts">
-          <span>牌堆 ${zones.deck.length}</span>
-          <span>弃牌 ${zones.discard.length}</span>
+        <h3>${escapeHtml(card.name)}</h3>
+        <div class="card-effect">
+          <span>技能描述</span>
+          <p>${escapeHtml(card.description)}</p>
         </div>
-      </div>
-      <button class="button button--draw" data-action="draw-card" data-country-id="${country.id}" ${
-        zones.deck.length ? "" : "disabled"
-      }>从牌堆抽 1 张</button>
-      <div class="hand-list">
+        <p class="card-source-note">${card.image ? "文字独立显示；具体符号与排版可同时参照左侧原始牌面。" : "自定义卡牌效果由玩家手动处理。"}</p>
         ${
-          zones.hand.length
-            ? zones.hand
-                .map((cardId) => {
-                  const card = state.cards[cardId]!;
-                  return `
-                    <div class="card-item">
-                      <div>
-                        <span class="card-type">${CARD_TYPE_NAMES[card.type]}</span>
-                        <strong>${escapeHtml(card.name)}</strong>
-                        ${card.isCustom ? '<small>自定义</small>' : ""}
-                      </div>
-                      <button class="text-button text-button--danger" data-action="discard-card" data-country-id="${country.id}" data-card-id="${card.id}">弃牌</button>
-                    </div>
-                  `;
-                })
-                .join("")
-            : '<div class="empty-state empty-state--small">手牌为空</div>'
+          inHand
+            ? `<button class="button button--danger" data-action="discard-card" data-country-id="${countryId}" data-card-id="${card.id}">弃置这张牌</button>`
+            : ""
         }
       </div>
-      <details class="discard-pile">
-        <summary>查看弃牌堆（${zones.discard.length}）</summary>
-        ${
-          zones.discard.length
-            ? `<ol>${zones.discard
-                .slice()
-                .reverse()
-                .map((cardId) => `<li>${escapeHtml(state.cards[cardId]?.name ?? "未知卡牌")}</li>`)
-                .join("")}</ol>`
-            : '<p class="muted">暂无弃牌</p>'
-        }
-      </details>
     </article>
   `;
 }
 
-function renderCards(): string {
-  const visibleCountries = countriesForFaction(store.state.activeFaction);
+function renderHandCard(card: Card, countryId: CountryId): string {
   return `
-    <section class="view-section">
-      <div class="section-heading">
+    <button class="hand-card ${selectedCardId === card.id ? "is-selected" : ""}" data-action="select-card" data-card-id="${card.id}" data-country-id="${countryId}">
+      ${renderCardFace(card, "hand-card__image")}
+      <span class="hand-card__caption">
+        <small>${CARD_TYPE_NAMES[card.type]}</small>
+        <strong>${escapeHtml(card.name)}</strong>
+      </span>
+    </button>
+  `;
+}
+
+function renderHandDock(): string {
+  const state = store.state;
+  const visibleCountries = countriesForFaction(state.activeFaction);
+  if (!visibleCountries.some((country) => country.id === handCountryId)) handCountryId = visibleCountries[0]!.id;
+  const country = countryById(handCountryId);
+  const zones = state.cardZones[handCountryId];
+  const handCards = zones.hand.map((id) => state.cards[id]).filter((card): card is Card => Boolean(card));
+  const allCountryCards = Object.values(state.cards)
+    .filter((card) => card.countryId === handCountryId)
+    .sort((a, b) => (a.sourceId ?? Number.MAX_SAFE_INTEGER) - (b.sourceId ?? Number.MAX_SAFE_INTEGER));
+  const selected =
+    (selectedCardId ? state.cards[selectedCardId] : undefined)?.countryId === handCountryId
+      ? state.cards[selectedCardId!]
+      : handCards[0] ?? allCountryCards[0];
+  if (selected) selectedCardId = selected.id;
+
+  return `
+    <section class="hand-dock" style="--country-color:${country.color}">
+      <div class="hand-dock__top">
         <div>
-          <p class="eyebrow">仅当前阵营可见</p>
-          <h2>${FACTION_NAMES[store.state.activeFaction]}手牌</h2>
+          <p class="eyebrow">PRIVATE COMMAND HAND</p>
+          <h2>${FACTION_NAMES[state.activeFaction]} · 手牌</h2>
         </div>
-        ${factionBadge(store.state.activeFaction)}
+        <div class="deck-counts">
+          <span>手牌 <b>${zones.hand.length}</b></span>
+          <span>牌堆 <b>${zones.deck.length}</b></span>
+          <span>弃牌 <b>${zones.discard.length}</b></span>
+        </div>
       </div>
-      <p class="privacy-note">另一阵营的三国手牌不会出现在当前页面中。</p>
-      <div class="hand-columns">
-        ${visibleCountries.map((country) => renderCardCountry(country.id)).join("")}
+      <div class="country-tabs" aria-label="选择国家手牌">
+        ${visibleCountries
+          .map(
+            (candidate) => `
+              <button class="${candidate.id === handCountryId ? "is-active" : ""}" data-action="select-hand-country" data-country-id="${candidate.id}">
+                <span style="--country-color:${candidate.color}">${candidate.shortName}</span>${candidate.name}
+              </button>
+            `,
+          )
+          .join("")}
       </div>
-      <section class="panel custom-card-panel">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">原型工具</p>
-            <h3>添加新卡牌</h3>
+      <div class="hand-toolbar">
+        <strong>${country.name}指挥手牌</strong>
+        <button class="button button--draw" data-action="draw-card" data-country-id="${country.id}" ${zones.deck.length ? "" : "disabled"}>
+          抽 1 张牌
+        </button>
+      </div>
+      <div class="hand-carousel" aria-label="${country.name}手牌">
+        ${handCards.length ? handCards.map((card) => renderHandCard(card, country.id)).join("") : '<div class="empty-state">手牌为空</div>'}
+      </div>
+      ${selected ? renderCardInspector(selected, country.id) : ""}
+      <div class="hand-dock__drawers">
+        <details class="deck-browser">
+          <summary>浏览${country.name}完整牌库（${allCountryCards.length} 张）</summary>
+          <div class="catalog-grid">
+            ${allCountryCards.map((card) => renderHandCard(card, country.id)).join("")}
           </div>
-        </div>
-        <form id="add-card-form" class="stack-form">
-          <label>
-            <span>国家</span>
-            <select name="countryId">
-              ${visibleCountries.map((country) => `<option value="${country.id}">${country.name}</option>`).join("")}
-            </select>
-          </label>
-          <label>
-            <span>卡牌名称</span>
-            <input name="name" maxlength="60" required placeholder="例如：临时增援" autocomplete="off" />
-          </label>
-          <div class="form-row">
+        </details>
+        <details class="discard-pile">
+          <summary>弃牌堆（${zones.discard.length}）</summary>
+          ${
+            zones.discard.length
+              ? `<ol>${zones.discard
+                  .slice()
+                  .reverse()
+                  .map((cardId) => `<li><button data-action="select-card" data-card-id="${cardId}" data-country-id="${country.id}">${escapeHtml(state.cards[cardId]?.name ?? "未知卡牌")}</button></li>`)
+                  .join("")}</ol>`
+              : '<p class="muted">暂无弃牌</p>'
+          }
+        </details>
+        <details class="custom-card-panel">
+          <summary>添加自定义卡牌</summary>
+          <form id="add-card-form" class="stack-form">
+            <input type="hidden" name="countryId" value="${country.id}" />
             <label>
-              <span>类型</span>
-              <select name="cardType">
-                ${Object.entries(CARD_TYPE_NAMES).map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
-              </select>
+              <span>卡牌名称</span>
+              <input name="name" maxlength="60" required placeholder="例如：临时增援" autocomplete="off" />
             </label>
             <label>
-              <span>加入</span>
-              <select name="destination">
-                <option value="hand">当前手牌</option>
-                <option value="deck">牌堆顶部</option>
-              </select>
+              <span>技能描述</span>
+              <textarea name="description" maxlength="300" rows="3" placeholder="写下这张牌由玩家手动执行的效果"></textarea>
             </label>
-          </div>
-          <button class="button button--primary" type="submit">添加卡牌</button>
-        </form>
-      </section>
+            <div class="form-row">
+              <label>
+                <span>类型</span>
+                <select name="cardType">
+                  ${Object.entries(CARD_TYPE_NAMES).map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
+                </select>
+              </label>
+              <label>
+                <span>加入</span>
+                <select name="destination">
+                  <option value="hand">当前手牌</option>
+                  <option value="deck">牌堆顶部</option>
+                </select>
+              </label>
+            </div>
+            <button class="button button--primary" type="submit">添加卡牌</button>
+          </form>
+        </details>
+      </div>
     </section>
   `;
 }
@@ -618,14 +724,19 @@ function renderSave(): string {
   `;
 }
 
+function renderBoard(): string {
+  return `
+    <div class="war-table">
+      ${renderMap()}
+      ${renderHandDock()}
+    </div>
+  `;
+}
+
 function renderCurrentView(): string {
   switch (currentView) {
-    case "map":
-      return renderMap();
-    case "cards":
-      return renderCards();
-    case "score":
-      return renderScore();
+    case "board":
+      return renderBoard();
     case "log":
       return renderLog();
     case "save":
@@ -668,7 +779,7 @@ function render(): void {
 
 function parseStack(value: string): { countryId: CountryId; kind: UnitKind } {
   const [countryId, kind] = value.split("|");
-  if (!countryId || (kind !== "army" && kind !== "navy")) throw new Error("请选择有效单位");
+  if (!countryId || (kind !== "army" && kind !== "navy" && kind !== "air-force")) throw new Error("请选择有效单位");
   countryById(countryId as CountryId);
   return { countryId: countryId as CountryId, kind };
 }
@@ -717,7 +828,12 @@ app.addEventListener("click", (event) => {
       target,
       `交给${FACTION_NAMES[target]}`,
       `请先把手机交给${FACTION_NAMES[target]}玩家，再由对方确认。`,
-      () => execute({ type: "SWITCH_FACTION", faction: target }, "阵营已切换"),
+      () => {
+        store.execute({ type: "SWITCH_FACTION", faction: target });
+        handCountryId = countriesForFaction(target)[0]!.id;
+        selectedCardId = null;
+        showToast("阵营已切换");
+      },
     );
     return;
   }
@@ -731,7 +847,9 @@ app.addEventListener("click", (event) => {
       `下一位是${countryById(nextCountry).name}。请交接手机后确认。`,
       () => {
         store.execute({ type: "END_TURN" });
-        currentView = "map";
+        currentView = "board";
+        handCountryId = countriesForFaction(target)[0]!.id;
+        selectedCardId = null;
         showToast(`现在是${countryById(nextCountry).name}回合`);
       },
     );
@@ -757,25 +875,43 @@ app.addEventListener("click", (event) => {
   if (action === "new-game") {
     if (!window.confirm("开始新游戏会替换当前浏览器存档。建议先导出 JSON，是否继续？")) return;
     store.newGame();
-    currentView = "map";
+    currentView = "board";
     selectedAreaId = "germany";
     mapScrollLeft = 190;
+    handCountryId = countriesForFaction("axis")[0]!.id;
+    selectedCardId = null;
     askForFaction("axis", "新战局已就绪", "由德国开始。请把手机交给 Axis 轴心国玩家。", () => undefined, false);
     return;
   }
+  if (action === "select-hand-country") {
+    handCountryId = button.dataset.countryId as CountryId;
+    selectedCardId = null;
+    render();
+    return;
+  }
+  if (action === "select-card") {
+    handCountryId = button.dataset.countryId as CountryId;
+    selectedCardId = button.dataset.cardId ?? null;
+    render();
+    document.querySelector(".card-inspector")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    return;
+  }
   if (action === "draw-card") {
-    execute({ type: "DRAW_CARD", countryId: button.dataset.countryId as CountryId }, "已抽牌");
+    const countryId = button.dataset.countryId as CountryId;
+    store.execute({ type: "DRAW_CARD", countryId });
+    selectedCardId = store.state.cardZones[countryId].hand.at(-1) ?? null;
+    showToast("已抽牌");
     return;
   }
   if (action === "discard-card") {
-    execute(
-      {
-        type: "DISCARD_CARD",
-        countryId: button.dataset.countryId as CountryId,
-        cardId: button.dataset.cardId ?? "",
-      },
-      "已弃牌",
-    );
+    const countryId = button.dataset.countryId as CountryId;
+    store.execute({
+      type: "DISCARD_CARD",
+      countryId,
+      cardId: button.dataset.cardId ?? "",
+    });
+    selectedCardId = store.state.cardZones[countryId].hand[0] ?? null;
+    showToast("已弃牌");
     return;
   }
   if (action === "adjust-vp") {
@@ -828,6 +964,8 @@ app.addEventListener("change", (event) => {
     const commit = () => {
       store.execute({ type: "SET_TURN_COUNTRY", countryId });
       if (faction !== store.state.activeFaction) store.execute({ type: "SWITCH_FACTION", faction });
+      handCountryId = countriesForFaction(faction)[0]!.id;
+      selectedCardId = null;
       showToast(`现在是${countryById(countryId).name}回合`);
     };
     if (faction !== store.state.activeFaction) {
@@ -840,14 +978,37 @@ app.addEventListener("change", (event) => {
     } else commit();
     return;
   }
+  if (target.name === "stack" && target.closest<HTMLFormElement>("#move-unit-form")) {
+    const form = target.closest<HTMLFormElement>("#move-unit-form");
+    const targetSelect = form?.querySelector<HTMLSelectElement>('select[name="toAreaId"]');
+    const submit = form?.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (!form || !targetSelect || !submit) return;
+    const stack = parseStack(target.value);
+    const fromAreaId = String(new FormData(form).get("fromAreaId"));
+    const fromArea = areaById(fromAreaId);
+    const targets =
+      stack.kind === "air-force"
+        ? AREAS.filter((candidate) => candidate.id !== fromAreaId)
+        : connectionsForArea(fromAreaId)
+            .map((connection) => areaById(otherEnd(connection, fromAreaId)))
+            .filter((candidate) => candidate.kind === fromArea.kind);
+    targetSelect.innerHTML =
+      targets.map((candidate) => `<option value="${candidate.id}">${candidate.name}</option>`).join("") ||
+      "<option>无可用区域</option>";
+    targetSelect.disabled = targets.length === 0;
+    submit.disabled = targets.length === 0;
+    return;
+  }
   if (target.id === "import-file" && target instanceof HTMLInputElement && target.files?.[0]) {
     const file = target.files[0];
     file
       .text()
       .then((text) => {
         store.importJson(text);
-        currentView = "map";
+        currentView = "board";
         selectedAreaId = AREAS.some((area) => area.id === selectedAreaId) ? selectedAreaId : AREAS[0]!.id;
+        handCountryId = countriesForFaction(store.state.activeFaction)[0]!.id;
+        selectedCardId = null;
         askForFaction(
           store.state.activeFaction,
           "存档已导入",
@@ -903,6 +1064,7 @@ app.addEventListener("submit", (event) => {
           type: "ADD_CUSTOM_CARD",
           countryId: String(data.get("countryId")) as CountryId,
           name: String(data.get("name")),
+          description: String(data.get("description")),
           cardType: String(data.get("cardType")) as CardType,
           destination: String(data.get("destination")) as "hand" | "deck",
         },

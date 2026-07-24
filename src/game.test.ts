@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { canMoveUnit, createInitialState, reduceGame } from "./game";
+import { CARD_CATALOG } from "./generated-card-catalog";
 import { AREAS, MAP_CONNECTIONS, areaById, connectionBetween, countriesForFaction } from "./prototype-data";
 import { GameStore, parseImportedSave, type StorageLike } from "./store";
 
@@ -100,15 +101,66 @@ describe("prototype game state", () => {
   it("draws and discards cards into the correct country's private zones", () => {
     let state = createInitialState();
     const originalDeckSize = state.cardZones.germany.deck.length;
+    const originalHandSize = state.cardZones.germany.hand.length;
     state = reduceGame(state, { type: "DRAW_CARD", countryId: "germany" });
     expect(state.cardZones.germany.deck).toHaveLength(originalDeckSize - 1);
-    expect(state.cardZones.germany.hand).toHaveLength(1);
-    expect(state.cardZones.japan.hand).toHaveLength(0);
+    expect(state.cardZones.germany.hand).toHaveLength(originalHandSize + 1);
+    expect(state.cardZones.japan.hand).toHaveLength(7);
 
-    const cardId = state.cardZones.germany.hand[0]!;
+    const cardId = state.cardZones.germany.hand.at(-1)!;
     state = reduceGame(state, { type: "DISCARD_CARD", countryId: "germany", cardId });
-    expect(state.cardZones.germany.hand).toHaveLength(0);
+    expect(state.cardZones.germany.hand).toHaveLength(originalHandSize);
     expect(state.cardZones.germany.discard).toEqual([cardId]);
+  });
+
+  it("includes the complete six-country card catalog with images and independent descriptions", () => {
+    const state = createInitialState();
+    expect(CARD_CATALOG).toHaveLength(380);
+    expect(Object.keys(state.cards)).toHaveLength(380);
+    expect(
+      Object.fromEntries(
+        countriesForFaction("axis")
+          .concat(countriesForFaction("allies"))
+          .map((country) => [
+            country.id,
+            Object.values(state.cards).filter((card) => card.countryId === country.id).length,
+          ]),
+      ),
+    ).toEqual({
+      germany: 68,
+      japan: 62,
+      italy: 54,
+      "united-kingdom": 66,
+      "soviet-union": 58,
+      "united-states": 72,
+    });
+    expect(Object.values(state.cards).every((card) => card.name && card.description && card.image)).toBe(true);
+    expect(Object.values(state.cardZones).every((zones) => zones.hand.length === 7)).toBe(true);
+  });
+
+  it("places, freely repositions, and removes an air force token", () => {
+    let state = createInitialState();
+    state = reduceGame(state, {
+      type: "PLACE_UNIT",
+      areaId: "germany",
+      countryId: "germany",
+      kind: "air-force",
+    });
+    state = reduceGame(state, {
+      type: "MOVE_UNIT",
+      fromAreaId: "germany",
+      toAreaId: "japan",
+      countryId: "germany",
+      kind: "air-force",
+    });
+    expect(state.areas.japan?.units[0]).toMatchObject({ countryId: "germany", kind: "air-force", count: 1 });
+    state = reduceGame(state, {
+      type: "REMOVE_UNIT",
+      areaId: "japan",
+      countryId: "germany",
+      kind: "air-force",
+    });
+    expect(state.areas.japan?.units).toHaveLength(0);
   });
 
   it("advances through all six countries and increments the round", () => {
@@ -141,9 +193,18 @@ describe("save, restore, import and undo", () => {
 
   it("round-trips an exported JSON save and rejects unrelated JSON", () => {
     const store = new GameStore();
-    store.execute({ type: "ADD_CUSTOM_CARD", countryId: "germany", name: "测试牌", cardType: "other", destination: "hand" });
+    const originalHandSize = store.state.cardZones.germany.hand.length;
+    store.execute({
+      type: "ADD_CUSTOM_CARD",
+      countryId: "germany",
+      name: "测试牌",
+      description: "由玩家手动执行",
+      cardType: "other",
+      destination: "hand",
+    });
     const imported = parseImportedSave(store.exportJson());
-    expect(imported.cardZones.germany.hand).toHaveLength(1);
+    expect(imported.cardZones.germany.hand).toHaveLength(originalHandSize + 1);
+    expect(Object.values(imported.cards).find((card) => card.name === "测试牌")?.description).toBe("由玩家手动执行");
     expect(imported.log.at(-1)?.message).not.toContain("测试牌");
     expect(() => parseImportedSave('{"hello":"world"}')).toThrow("兼容");
   });

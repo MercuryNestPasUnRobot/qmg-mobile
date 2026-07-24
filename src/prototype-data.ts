@@ -17,7 +17,7 @@ export type CountryId =
   | "soviet-union"
   | "united-states";
 export type AreaKind = "land" | "sea";
-export type UnitKind = "army" | "navy";
+export type UnitKind = "army" | "navy" | "air-force";
 
 export interface Country {
   id: CountryId;
@@ -48,11 +48,6 @@ export interface MapConnection {
   b: string;
   kind: ConnectionKind;
   controller?: string;
-}
-
-export interface PrototypeCardDefinition {
-  name: string;
-  type: "build" | "event" | "response" | "status";
 }
 
 export const FACTION_NAMES: Record<Faction, string> = {
@@ -186,25 +181,6 @@ export const MAP_CONNECTIONS: readonly MapConnection[] = [
   { a: "bay-of-bengal", b: "south-china-sea", kind: "strait", controller: "southeast-asia" },
   { a: "north-atlantic", b: "southeast-pacific", kind: "strait", controller: "latin-america" },
 ] as const;
-
-const COMMON_CARDS: readonly PrototypeCardDefinition[] = [
-  { name: "紧急动员", type: "build" },
-  { name: "战略预备队", type: "build" },
-  { name: "补给线", type: "status" },
-  { name: "先发制人", type: "event" },
-  { name: "反击", type: "response" },
-  { name: "工业生产", type: "status" },
-  { name: "战区调动", type: "event" },
-  { name: "坚守阵地", type: "response" },
-] as const;
-
-export function prototypeCardsFor(country: Country): PrototypeCardDefinition[] {
-  return COMMON_CARDS.map((card, index) => ({
-    ...card,
-    name: `${country.shortName} · ${card.name}`,
-    type: index === 0 ? "build" : card.type,
-  }));
-}
 
 export function countryById(id: CountryId): Country {
   const country = COUNTRIES.find((candidate) => candidate.id === id);

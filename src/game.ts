@@ -5,17 +5,29 @@ import {
   areaById,
   connectionBetween,
   countryById,
-  prototypeCardsFor,
   type CountryId,
   type Faction,
   type UnitKind,
 } from "./prototype-data";
+import { CARD_CATALOG } from "./generated-card-catalog";
 
 export const SAVE_VERSION = 1;
 export const PHASES = ["开始", "出牌", "空军（Total War）", "补给", "计分", "弃牌", "抽牌"] as const;
 const LEGACY_PHASES = ["部署", "行动", "战斗"] as const;
 export type Phase = (typeof PHASES)[number] | (typeof LEGACY_PHASES)[number];
-export type CardType = "build" | "event" | "response" | "status" | "other";
+export type CardType =
+  | "build"
+  | "build-army"
+  | "build-navy"
+  | "land-battle"
+  | "sea-battle"
+  | "economic"
+  | "event"
+  | "response"
+  | "status"
+  | "air-power"
+  | "bolster"
+  | "other";
 
 export interface UnitStack {
   countryId: CountryId;
@@ -32,7 +44,11 @@ export interface Card {
   id: string;
   countryId: CountryId;
   name: string;
+  description: string;
   type: CardType;
+  edition: "base" | "total-war" | "custom";
+  image?: string;
+  sourceId?: number;
   isCustom: boolean;
 }
 
@@ -74,7 +90,14 @@ export type GameAction =
   | { type: "REMOVE_UNIT"; areaId: string; countryId: CountryId; kind: UnitKind }
   | { type: "DRAW_CARD"; countryId: CountryId }
   | { type: "DISCARD_CARD"; countryId: CountryId; cardId: string }
-  | { type: "ADD_CUSTOM_CARD"; countryId: CountryId; name: string; cardType: CardType; destination: "hand" | "deck" }
+  | {
+      type: "ADD_CUSTOM_CARD";
+      countryId: CountryId;
+      name: string;
+      description: string;
+      cardType: CardType;
+      destination: "hand" | "deck";
+    }
   | { type: "ADJUST_VP"; faction: Faction; amount: number }
   | { type: "SET_VP"; faction: Faction; value: number };
 
@@ -91,17 +114,18 @@ export function createInitialState(now = new Date()): GameState {
   const cardZones = emptyZones();
 
   for (const country of COUNTRIES) {
-    prototypeCardsFor(country).forEach((definition, index) => {
-      const id = `${country.id}-prototype-${index + 1}`;
-      cards[id] = {
-        id,
+    const countryCards = CARD_CATALOG.filter((card) => card.countryId === country.id);
+    for (const definition of countryCards) {
+      cards[definition.id] = {
+        ...definition,
         countryId: country.id,
-        name: definition.name,
         type: definition.type,
+        edition: definition.edition,
         isCustom: false,
       };
-      cardZones[country.id].deck.push(id);
-    });
+      cardZones[country.id].deck.push(definition.id);
+    }
+    cardZones[country.id].hand.push(...cardZones[country.id].deck.splice(-7));
   }
 
   const timestamp = now.toISOString();
@@ -161,6 +185,7 @@ export function canMoveUnit(
 ): boolean {
   const from = areaById(fromAreaId);
   const to = areaById(toAreaId);
+  if (kind === "air-force") return fromAreaId !== toAreaId;
   if (from.kind !== to.kind) return false;
   if ((kind === "army" && from.kind !== "land") || (kind === "navy" && from.kind !== "sea")) return false;
   const connection = connectionBetween(fromAreaId, toAreaId);
@@ -182,11 +207,17 @@ export function describeAction(action: GameAction, state: GameState): string {
       return `结束${countryById(state.turnCountry).name}回合，交给${countryById(TURN_ORDER[(index + 1) % TURN_ORDER.length]!).name}`;
     }
     case "PLACE_UNIT":
-      return `${countryById(action.countryId).name}在${areaById(action.areaId).name}放置1支${action.kind === "army" ? "陆军" : "海军"}`;
+      return `${countryById(action.countryId).name}在${areaById(action.areaId).name}放置1支${
+        action.kind === "army" ? "陆军" : action.kind === "navy" ? "海军" : "空军"
+      }`;
     case "MOVE_UNIT":
-      return `${countryById(action.countryId).name}${action.kind === "army" ? "陆军" : "海军"}：${areaById(action.fromAreaId).name} → ${areaById(action.toAreaId).name}`;
+      return `${countryById(action.countryId).name}${
+        action.kind === "army" ? "陆军" : action.kind === "navy" ? "海军" : "空军"
+      }：${areaById(action.fromAreaId).name} → ${areaById(action.toAreaId).name}`;
     case "REMOVE_UNIT":
-      return `${countryById(action.countryId).name}从${areaById(action.areaId).name}移除1支${action.kind === "army" ? "陆军" : "海军"}`;
+      return `${countryById(action.countryId).name}从${areaById(action.areaId).name}移除1支${
+        action.kind === "army" ? "陆军" : action.kind === "navy" ? "海军" : "空军"
+      }`;
     case "DRAW_CARD":
       return `${countryById(action.countryId).name}抽1张牌`;
     case "DISCARD_CARD":
@@ -240,9 +271,9 @@ export function reduceGame(state: GameState, action: GameAction, now = new Date(
       requireCompatibleArea(action.fromAreaId, action.kind);
       requireCompatibleArea(action.toAreaId, action.kind);
       const connection = connectionBetween(action.fromAreaId, action.toAreaId);
-      if (!connection) throw new Error("只能移动到相邻区域");
+      if (!connection && action.kind !== "air-force") throw new Error("只能移动到相邻区域");
       if (!canMoveUnit(next, action.fromAreaId, action.toAreaId, action.countryId, action.kind)) {
-        if (connection.kind === "strait") throw new Error("该阵营目前不能通过此海峡");
+        if (connection?.kind === "strait") throw new Error("该阵营目前不能通过此海峡");
         throw new Error("单位只能在相同地形的相邻区域间移动");
       }
       const from = next.areas[action.fromAreaId];
@@ -291,7 +322,9 @@ export function reduceGame(state: GameState, action: GameAction, now = new Date(
         id,
         countryId: action.countryId,
         name,
+        description: action.description.trim() || "自定义卡牌，效果由玩家手动处理。",
         type: action.cardType,
+        edition: "custom",
         isCustom: true,
       };
       zones[action.destination].push(id);
@@ -334,6 +367,50 @@ function mergeAreaUnits(target: AreaState, source: AreaState): void {
   }
 }
 
+function normalizeCards(state: GameState): void {
+  for (const country of COUNTRIES) {
+    const zones = state.cardZones[country.id];
+    zones.deck = zones.deck.filter((id) => !id.includes("-prototype-"));
+    zones.hand = zones.hand.filter((id) => !id.includes("-prototype-"));
+    zones.discard = zones.discard.filter((id) => !id.includes("-prototype-"));
+  }
+  for (const id of Object.keys(state.cards)) {
+    if (id.includes("-prototype-")) delete state.cards[id];
+  }
+
+  const placed = new Set(
+    COUNTRIES.flatMap((country) => {
+      const zones = state.cardZones[country.id];
+      return [...zones.deck, ...zones.hand, ...zones.discard];
+    }),
+  );
+
+  for (const definition of CARD_CATALOG) {
+    const existing = state.cards[definition.id];
+    state.cards[definition.id] = {
+      id: definition.id,
+      sourceId: definition.sourceId,
+      countryId: definition.countryId,
+      name: definition.name,
+      description: definition.description,
+      type: definition.type,
+      edition: definition.edition,
+      image: definition.image,
+      isCustom: false,
+      ...existing,
+    };
+    if (!placed.has(definition.id)) {
+      state.cardZones[definition.countryId].deck.push(definition.id);
+      placed.add(definition.id);
+    }
+  }
+
+  for (const card of Object.values(state.cards)) {
+    if (!card.description) card.description = "自定义卡牌，效果由玩家手动处理。";
+    if (!card.edition) card.edition = card.isCustom ? "custom" : "base";
+  }
+}
+
 export function normalizeGameState(state: GameState): GameState {
   const normalized = cloneState(state);
   for (const area of AREAS) {
@@ -348,6 +425,7 @@ export function normalizeGameState(state: GameState): GameState {
   if ((LEGACY_PHASES as readonly string[]).includes(normalized.phase)) {
     normalized.phase = "出牌";
   }
+  normalizeCards(normalized);
   return normalized;
 }
 
