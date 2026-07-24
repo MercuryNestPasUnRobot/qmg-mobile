@@ -1745,3 +1745,1104 @@ textarea {
     scroll-behavior: auto !important;
   }
 }
+
+/* Landscape tactical table */
+.tactical-header {
+  position: relative;
+  z-index: 25;
+  display: grid;
+  grid-template-columns: auto auto minmax(220px, 1fr) minmax(220px, 0.9fr) minmax(140px, 0.55fr) auto;
+  gap: 8px;
+  padding: 9px 11px;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  color: #f7f3e7;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.07), transparent 44%),
+    #17271f;
+  box-shadow: var(--shadow);
+}
+
+.tactical-brand {
+  display: grid;
+  line-height: 1;
+}
+
+.tactical-brand span {
+  color: #cdbf91;
+  font-size: 0.58rem;
+  font-weight: 950;
+  letter-spacing: 0.14em;
+}
+
+.tactical-brand strong {
+  margin-top: 4px;
+  font-family: Georgia, "Noto Serif SC", serif;
+  white-space: nowrap;
+}
+
+.turn-identity {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.turn-identity > span {
+  color: #b9c2ba;
+  font-size: 0.65rem;
+  font-weight: 900;
+}
+
+.turn-identity > strong {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.turn-identity i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--country-color);
+}
+
+.compact-turn-controls {
+  display: grid;
+  grid-template-columns: 1.25fr 0.9fr;
+  gap: 5px;
+}
+
+.compact-turn-controls select {
+  min-height: 36px;
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #f7f3e7;
+  background: #2b3a32;
+}
+
+.score-strip--compact {
+  gap: 5px;
+}
+
+.score-strip--compact .score-chip {
+  padding: 6px 7px;
+}
+
+.score-strip--compact .score-chip > strong {
+  font-size: 1.45rem;
+}
+
+.switcher--compact {
+  min-width: 0;
+  border-radius: 10px;
+}
+
+.tactical-header .header-actions {
+  align-items: center;
+  gap: 4px;
+}
+
+.tactical-header .icon-button {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #f7f3e7;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 1rem;
+}
+
+.tactical-header .button--turn {
+  min-height: 36px;
+  margin: 0;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.battle-map-pane {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #10272e;
+  box-shadow: var(--shadow);
+}
+
+.map-commandbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  min-height: 42px;
+  padding: 6px 8px;
+  align-items: center;
+  color: #eef3e9;
+  background: #17271f;
+}
+
+.map-commandbar > div:first-child {
+  display: grid;
+}
+
+.map-commandbar > div:first-child strong {
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: 0.9rem;
+}
+
+.map-commandbar > div:first-child span {
+  color: rgba(238, 243, 233, 0.55);
+  font-size: 0.58rem;
+}
+
+.map-commandbar .map-legend {
+  margin: 0;
+  padding: 4px 7px;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: rgba(238, 243, 233, 0.66);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.map-stage {
+  position: relative;
+  min-height: 310px;
+}
+
+.map-stage .map-viewport {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+
+.area-command {
+  position: absolute;
+  z-index: 12;
+  right: 8px;
+  bottom: 8px;
+  display: grid;
+  width: min(360px, calc(100% - 16px));
+  gap: 5px;
+  padding: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 13px;
+  color: #eef3e9;
+  background: rgba(18, 31, 25, 0.94);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(12px);
+}
+
+.area-command__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.area-command__title span {
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: #d7c98e;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.52rem;
+  font-weight: 900;
+}
+
+.area-command__title strong {
+  flex: 1;
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: 0.84rem;
+}
+
+.area-command__title b {
+  display: grid;
+  min-width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  color: #172019;
+  background: #e8d89f;
+  font-size: 0.65rem;
+}
+
+.inline-picker {
+  display: flex;
+  gap: 4px;
+}
+
+.inline-picker button {
+  display: flex;
+  min-height: 32px;
+  padding: 4px 7px;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  color: rgba(238, 243, 233, 0.7);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.62rem;
+  font-weight: 900;
+}
+
+.inline-picker--countries button {
+  flex: 1;
+  border-bottom: 3px solid var(--country-color);
+}
+
+.inline-picker button.is-active {
+  color: #172019;
+  background: #f1e5bc;
+}
+
+.inline-picker--units {
+  display: grid;
+  grid-template-columns: 0.75fr 0.75fr 1.1fr;
+}
+
+.inline-picker--units svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+.inline-picker .quick-place {
+  border-color: #d7c98e;
+  color: #172019;
+  background: #e8d89f;
+}
+
+.unit-strip {
+  display: flex;
+  min-height: 27px;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.unit-remove-chip {
+  display: flex;
+  flex: 0 0 auto;
+  padding: 0;
+  align-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.unit-remove-chip .unit-chip {
+  color: #eef3e9;
+  background: transparent;
+}
+
+.unit-remove-chip > b {
+  display: grid;
+  width: 24px;
+  align-self: stretch;
+  place-items: center;
+  color: #ffd0ca;
+  background: rgba(180, 60, 45, 0.34);
+}
+
+.command-rail {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  padding: 10px;
+  overflow: hidden;
+  border-top: 4px solid var(--country-color);
+  border-radius: 16px;
+  color: #eef3e9;
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--country-color) 30%, transparent), transparent 15rem),
+    #17231d;
+  box-shadow: var(--shadow);
+}
+
+.country-tabs--compact {
+  gap: 3px;
+}
+
+.country-tabs--compact button {
+  min-height: 36px;
+  font-size: 0.61rem;
+}
+
+.country-tabs--compact button span {
+  width: 22px;
+  height: 22px;
+}
+
+.active-slots {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.active-slot {
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.active-slot header {
+  display: flex;
+  margin-bottom: 4px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.active-slot header strong {
+  color: #d7c98e;
+  font-size: 0.64rem;
+}
+
+.active-slot header span {
+  font-size: 0.58rem;
+}
+
+.active-slot > div {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.active-slot > div > button {
+  display: grid;
+  min-width: 96px;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #eef3e9;
+  background: rgba(255, 255, 255, 0.07);
+  text-align: left;
+}
+
+.active-slot > div > button.is-selected {
+  border-color: #e8d89f;
+}
+
+.active-slot button span,
+.active-slot p {
+  margin: 0;
+  color: rgba(238, 243, 233, 0.55);
+  font-size: 0.52rem;
+}
+
+.active-slot button strong {
+  overflow: hidden;
+  font-size: 0.61rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-inspector--rail {
+  min-height: 0;
+  margin: 0;
+  align-self: stretch;
+}
+
+.card-inspector--rail .card-effect {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.card-action-row {
+  display: flex;
+  width: 100%;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.card-action-row .button {
+  min-height: 34px;
+  padding: 5px 7px;
+  font-size: 0.62rem;
+}
+
+.button--slot {
+  color: #1a2a21;
+  background: #e8d89f;
+}
+
+.rail-empty {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  color: rgba(238, 243, 233, 0.55);
+  font-size: 0.72rem;
+}
+
+.hand-dock--landscape {
+  min-width: 0;
+  padding: 9px;
+}
+
+.hand-rack-toolbar {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 10px;
+}
+
+.hand-rack-toolbar > strong {
+  flex: 1;
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: 0.88rem;
+}
+
+.hand-rack-toolbar .deck-counts {
+  display: flex;
+  gap: 6px;
+  color: rgba(238, 243, 233, 0.6);
+}
+
+.hand-rack-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.hand-rack-actions button {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  color: #eef3e9;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.62rem;
+  font-weight: 900;
+}
+
+.hand-dock--landscape .hand-carousel {
+  margin: 0 -9px;
+  padding: 3px 9px 6px;
+}
+
+.card-manager-overlay {
+  position: fixed;
+  z-index: 45;
+  inset: 0;
+  display: grid;
+  padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
+    max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  place-items: center;
+  background: rgba(5, 12, 9, 0.78);
+  backdrop-filter: blur(8px);
+}
+
+.card-manager {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  width: min(860px, 100%);
+  max-height: min(680px, 100%);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  color: #eef3e9;
+  background: #17231d;
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.45);
+}
+
+.card-manager > header {
+  display: flex;
+  padding: 11px 14px;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.card-manager > header span {
+  color: #b7c1b7;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.card-manager > header h2 {
+  margin: 2px 0 0;
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: 1.1rem;
+}
+
+.card-manager > header > button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  color: white;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 1.2rem;
+}
+
+.card-manager__tools {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+  gap: 6px;
+  padding: 8px 12px;
+}
+
+.card-manager__tools input {
+  min-height: 38px;
+  color: #172019;
+}
+
+.card-manager__tools button,
+.manager-card-row__actions button {
+  min-height: 34px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 7px;
+  color: #eef3e9;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.6rem;
+  font-weight: 900;
+}
+
+.order-note {
+  margin: 0;
+  padding: 0 12px 7px;
+  color: rgba(238, 243, 233, 0.54);
+  font-size: 0.6rem;
+}
+
+.manager-card-list {
+  display: grid;
+  gap: 6px;
+  padding: 0 12px 12px;
+  overflow-y: auto;
+}
+
+.manager-card-row {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  gap: 8px;
+  min-height: 76px;
+  padding: 7px;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.manager-card-row__image {
+  width: 54px;
+  height: 72px;
+  border-radius: 5px;
+  object-fit: cover;
+}
+
+.manager-card-row > div:nth-child(2) {
+  display: grid;
+  gap: 2px;
+}
+
+.manager-card-row > div:nth-child(2) > span {
+  color: #d7c98e;
+  font-size: 0.54rem;
+  font-weight: 900;
+}
+
+.manager-card-row > div:nth-child(2) > strong {
+  font-size: 0.74rem;
+}
+
+.manager-card-row > div:nth-child(2) > small {
+  display: -webkit-box;
+  overflow: hidden;
+  color: rgba(238, 243, 233, 0.58);
+  font-size: 0.58rem;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.manager-card-row__actions {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 4px;
+}
+
+.card-manager--custom {
+  grid-template-rows: auto minmax(0, 1fr);
+  max-width: 620px;
+}
+
+.custom-card-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.custom-card-form label:nth-of-type(2) {
+  grid-column: 1 / -1;
+}
+
+.custom-card-form .button {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 899px) and (orientation: portrait) {
+  .tactical-header {
+    grid-template-columns: 1fr auto;
+  }
+
+  .compact-turn-controls,
+  .score-strip--compact,
+  .switcher--compact {
+    grid-column: 1 / -1;
+  }
+
+  .turn-identity {
+    justify-self: end;
+  }
+
+  .tactical-header .header-actions {
+    grid-column: 1 / -1;
+  }
+
+  .war-table {
+    grid-template-columns: 1fr;
+  }
+
+  .command-rail,
+  .hand-dock--landscape {
+    grid-column: 1;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+  html,
+  body,
+  #app {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .app-shell {
+    display: grid;
+    grid-template-rows: 48px minmax(0, 1fr);
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    min-height: 0;
+    padding: max(3px, env(safe-area-inset-top)) max(5px, env(safe-area-inset-right))
+      max(3px, env(safe-area-inset-bottom)) max(5px, env(safe-area-inset-left));
+    overflow: hidden;
+    background: #d9ddcf;
+  }
+
+  .tactical-header {
+    grid-template-columns: auto auto minmax(120px, 0.8fr) minmax(112px, 0.7fr) 68px auto;
+    gap: 4px;
+    height: 44px;
+    padding: 4px 6px;
+    border-radius: 10px;
+  }
+
+  .tactical-brand strong {
+    display: none;
+  }
+
+  .turn-identity .faction-badge {
+    display: none;
+  }
+
+  .compact-turn-controls {
+    gap: 3px;
+  }
+
+  .compact-turn-controls select {
+    min-height: 30px;
+    padding: 0 5px;
+    border-radius: 7px;
+    font-size: 0.65rem;
+  }
+
+  .score-strip--compact .score-chip {
+    grid-template-columns: 1fr auto;
+    padding: 3px 5px;
+    border-radius: 7px;
+  }
+
+  .score-strip--compact .score-chip > span {
+    font-size: 0.48rem;
+  }
+
+  .score-strip--compact .score-chip > strong {
+    font-size: 1.05rem;
+  }
+
+  .score-strip--compact .score-chip button {
+    width: 22px;
+    height: 20px;
+  }
+
+  .switcher--compact button {
+    min-height: 30px;
+    padding: 2px;
+    font-size: 0.62rem;
+  }
+
+  .tactical-header .icon-button {
+    width: 27px;
+    height: 27px;
+    font-size: 0.8rem;
+  }
+
+  .tactical-header .button--turn {
+    min-height: 29px;
+    padding: 4px 6px;
+    font-size: 0.62rem;
+  }
+
+  .content {
+    min-height: 0;
+    padding: 4px 0 0;
+    overflow: hidden;
+  }
+
+  .content > .view-section {
+    height: 100%;
+    overflow-y: auto;
+  }
+
+  .war-table {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(235px, 31vw);
+    grid-template-rows: minmax(0, 1fr) 112px;
+    gap: 5px;
+    height: 100%;
+  }
+
+  .war-table > .battle-map-pane {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .war-table > .command-rail {
+    grid-column: 2;
+    grid-row: 1 / 3;
+  }
+
+  .war-table > .hand-dock--landscape {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .war-table > .view-section {
+    position: static;
+  }
+
+  .battle-map-pane {
+    display: grid;
+    grid-template-rows: 32px minmax(0, 1fr);
+    border-radius: 9px;
+  }
+
+  .map-commandbar {
+    min-height: 32px;
+    padding: 2px 5px;
+  }
+
+  .map-commandbar > div:first-child span {
+    display: none;
+  }
+
+  .map-commandbar .map-legend {
+    padding: 2px 5px;
+  }
+
+  .map-commandbar .map-tools {
+    gap: 3px;
+  }
+
+  .map-commandbar .icon-button {
+    width: 27px;
+    height: 27px;
+  }
+
+  .map-stage {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .map-stage .map-canvas {
+    height: 100%;
+    min-width: 100%;
+    aspect-ratio: auto;
+  }
+
+  .area-command {
+    right: 5px;
+    bottom: 5px;
+    width: min(330px, 67%);
+    gap: 3px;
+    padding: 5px;
+    border-radius: 9px;
+  }
+
+  .area-command__title {
+    min-height: 20px;
+  }
+
+  .inline-picker button {
+    min-height: 27px;
+    padding: 2px 5px;
+  }
+
+  .unit-strip {
+    min-height: 24px;
+  }
+
+  .unit-chip {
+    padding: 1px 4px;
+    font-size: 0.56rem;
+  }
+
+  .unit-chip__icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .command-rail {
+    grid-template-rows: 33px 52px minmax(0, 1fr);
+    gap: 4px;
+    padding: 5px;
+    border-radius: 9px;
+  }
+
+  .country-tabs--compact button {
+    min-height: 30px;
+    padding: 3px;
+  }
+
+  .country-tabs--compact button span {
+    width: 19px;
+    height: 19px;
+    font-size: 0.48rem;
+  }
+
+  .active-slots {
+    gap: 3px;
+  }
+
+  .active-slot {
+    padding: 3px;
+  }
+
+  .active-slot header {
+    margin: 0;
+  }
+
+  .active-slot > div > button {
+    min-width: 76px;
+    padding: 3px;
+  }
+
+  .card-inspector--rail {
+    grid-template-columns: 70px minmax(0, 1fr);
+    gap: 6px;
+    padding: 6px;
+    overflow: hidden;
+    border-radius: 8px;
+  }
+
+  .card-inspector--rail .card-inspector__image {
+    max-height: 94px;
+  }
+
+  .card-inspector--rail h3 {
+    margin: 3px 0;
+    font-size: 0.78rem;
+  }
+
+  .card-inspector--rail .card-meta span {
+    padding: 2px 3px;
+    font-size: 0.43rem;
+  }
+
+  .card-inspector--rail .card-effect {
+    padding: 5px;
+  }
+
+  .card-inspector--rail .card-effect p {
+    font-size: 0.59rem;
+    line-height: 1.35;
+  }
+
+  .card-action-row {
+    margin-top: 3px;
+  }
+
+  .card-action-row .button {
+    min-height: 28px;
+    padding: 3px 5px;
+    font-size: 0.54rem;
+  }
+
+  .hand-dock--landscape {
+    display: grid;
+    grid-template-columns: 155px minmax(0, 1fr);
+    gap: 5px;
+    height: 112px;
+    padding: 5px;
+    border-radius: 9px;
+  }
+
+  .hand-rack-toolbar {
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    min-height: 0;
+    gap: 2px;
+    align-content: start;
+  }
+
+  .hand-rack-toolbar > strong {
+    font-size: 0.7rem;
+  }
+
+  .hand-rack-toolbar .deck-counts {
+    gap: 4px;
+    font-size: 0.54rem;
+    text-align: left;
+  }
+
+  .hand-rack-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-self: end;
+  }
+
+  .hand-rack-actions button {
+    min-height: 27px;
+    padding: 2px;
+    font-size: 0.54rem;
+  }
+
+  .hand-dock--landscape .hand-carousel {
+    height: 102px;
+    margin: 0;
+    padding: 1px 2px 3px;
+  }
+
+  .hand-dock--landscape .hand-card {
+    position: relative;
+    display: block;
+    width: 70px;
+    min-width: 70px;
+    height: 98px;
+    border-radius: 6px;
+  }
+
+  .hand-dock--landscape .hand-card__image {
+    height: 94px;
+    aspect-ratio: auto;
+  }
+
+  .hand-dock--landscape .hand-card__caption {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    min-height: 28px;
+    padding: 3px 4px;
+    color: white;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.92));
+  }
+
+  .hand-dock--landscape .hand-card__caption small {
+    display: none;
+  }
+
+  .hand-dock--landscape .hand-card__caption strong {
+    font-size: 0.54rem;
+  }
+
+  .bottom-nav {
+    display: none;
+  }
+
+  .toast {
+    right: 245px;
+    bottom: 8px;
+    left: auto;
+    font-size: 0.66rem;
+  }
+
+  .card-manager-overlay {
+    padding: 5px;
+  }
+
+  .card-manager {
+    width: min(800px, 96vw);
+    max-height: 96vh;
+    border-radius: 10px;
+  }
+
+  .card-manager > header {
+    padding: 5px 9px;
+  }
+
+  .card-manager > header h2 {
+    font-size: 0.86rem;
+  }
+
+  .card-manager > header > button {
+    width: 30px;
+    height: 30px;
+  }
+
+  .card-manager__tools {
+    padding: 5px 8px;
+  }
+
+  .card-manager__tools input {
+    min-height: 32px;
+  }
+
+  .manager-card-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+    padding: 0 8px 8px;
+  }
+
+  .manager-card-row {
+    grid-template-columns: 42px minmax(0, 1fr);
+    min-height: 66px;
+    padding: 4px;
+  }
+
+  .manager-card-row__image {
+    width: 42px;
+    height: 56px;
+  }
+
+  .manager-card-row__actions {
+    grid-column: 1 / -1;
+    display: flex;
+  }
+
+  .manager-card-row__actions button {
+    flex: 1;
+    min-height: 27px;
+    padding: 2px 4px;
+  }
+
+  .custom-card-form {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .custom-card-form label:nth-of-type(2) {
+    grid-column: span 2;
+  }
+
+  .custom-card-form .button {
+    grid-column: 1 / -1;
+  }
+}

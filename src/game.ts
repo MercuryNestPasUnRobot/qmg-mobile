@@ -56,6 +56,8 @@ export interface CardZones {
   deck: string[];
   hand: string[];
   discard: string[];
+  status: string[];
+  response: string[];
 }
 
 export interface LogEntry {
@@ -86,10 +88,18 @@ export type GameAction =
   | { type: "SET_PHASE"; phase: Phase }
   | { type: "END_TURN" }
   | { type: "PLACE_UNIT"; areaId: string; countryId: CountryId; kind: UnitKind }
-  | { type: "MOVE_UNIT"; fromAreaId: string; toAreaId: string; countryId: CountryId; kind: UnitKind }
   | { type: "REMOVE_UNIT"; areaId: string; countryId: CountryId; kind: UnitKind }
   | { type: "DRAW_CARD"; countryId: CountryId }
   | { type: "DISCARD_CARD"; countryId: CountryId; cardId: string }
+  | { type: "DISCARD_DECK_CARD"; countryId: CountryId; cardId: string }
+  | { type: "SEARCH_DECK_CARD"; countryId: CountryId; cardId: string }
+  | { type: "SHUFFLE_DECK"; countryId: CountryId; order: string[] }
+  | { type: "MOVE_DECK_CARD"; countryId: CountryId; cardId: string; placement: "top" | "bottom" }
+  | { type: "RECOVER_DISCARD_CARD"; countryId: CountryId; cardId: string; destination: "hand" | "deck-top" }
+  | { type: "RESHUFFLE_DISCARD"; countryId: CountryId; order: string[] }
+  | { type: "PLAY_CARD_TO_SLOT"; countryId: CountryId; cardId: string; slot: "status" | "response" }
+  | { type: "RESOLVE_SLOT_CARD"; countryId: CountryId; cardId: string; slot: "status" | "response" }
+  | { type: "RETURN_SLOT_CARD"; countryId: CountryId; cardId: string; slot: "status" | "response" }
   | {
       type: "ADD_CUSTOM_CARD";
       countryId: CountryId;
@@ -104,7 +114,7 @@ export type GameAction =
 function emptyZones(): Record<CountryId, CardZones> {
   const zones = {} as Record<CountryId, CardZones>;
   for (const country of COUNTRIES) {
-    zones[country.id] = { deck: [], hand: [], discard: [] };
+    zones[country.id] = { deck: [], hand: [], discard: [], status: [], response: [] };
   }
   return zones;
 }
@@ -210,10 +220,6 @@ export function describeAction(action: GameAction, state: GameState): string {
       return `${countryById(action.countryId).name}在${areaById(action.areaId).name}放置1支${
         action.kind === "army" ? "陆军" : action.kind === "navy" ? "海军" : "空军"
       }`;
-    case "MOVE_UNIT":
-      return `${countryById(action.countryId).name}${
-        action.kind === "army" ? "陆军" : action.kind === "navy" ? "海军" : "空军"
-      }：${areaById(action.fromAreaId).name} → ${areaById(action.toAreaId).name}`;
     case "REMOVE_UNIT":
       return `${countryById(action.countryId).name}从${areaById(action.areaId).name}移除1支${
         action.kind === "army" ? "陆军" : action.kind === "navy" ? "海军" : "空军"
@@ -222,6 +228,24 @@ export function describeAction(action: GameAction, state: GameState): string {
       return `${countryById(action.countryId).name}抽1张牌`;
     case "DISCARD_CARD":
       return `${countryById(action.countryId).name}弃掉「${state.cards[action.cardId]?.name ?? "未知卡牌"}」`;
+    case "DISCARD_DECK_CARD":
+      return `${countryById(action.countryId).name}从牌堆弃掉「${state.cards[action.cardId]?.name ?? "未知卡牌"}」`;
+    case "SEARCH_DECK_CARD":
+      return `${countryById(action.countryId).name}从牌堆找到「${state.cards[action.cardId]?.name ?? "未知卡牌"}」并加入手牌`;
+    case "SHUFFLE_DECK":
+      return `${countryById(action.countryId).name}洗牌`;
+    case "MOVE_DECK_CARD":
+      return `${countryById(action.countryId).name}将「${state.cards[action.cardId]?.name ?? "未知卡牌"}」置于牌堆${action.placement === "top" ? "顶" : "底"}`;
+    case "RECOVER_DISCARD_CARD":
+      return `${countryById(action.countryId).name}从弃牌堆回收「${state.cards[action.cardId]?.name ?? "未知卡牌"}」到${action.destination === "hand" ? "手牌" : "牌堆顶"}`;
+    case "RESHUFFLE_DISCARD":
+      return `${countryById(action.countryId).name}将弃牌堆洗回牌堆`;
+    case "PLAY_CARD_TO_SLOT":
+      return `${countryById(action.countryId).name}将「${state.cards[action.cardId]?.name ?? "未知卡牌"}」放入${action.slot === "status" ? "状态" : "响应"}栏`;
+    case "RESOLVE_SLOT_CARD":
+      return `${countryById(action.countryId).name}结算并弃置「${state.cards[action.cardId]?.name ?? "未知卡牌"}」`;
+    case "RETURN_SLOT_CARD":
+      return `${countryById(action.countryId).name}将「${state.cards[action.cardId]?.name ?? "未知卡牌"}」收回手牌`;
     case "ADD_CUSTOM_CARD":
       return `${countryById(action.countryId).name}添加1张自定义卡牌到${action.destination === "hand" ? "手牌" : "牌堆"}`;
     case "ADJUST_VP":
@@ -267,27 +291,6 @@ export function reduceGame(state: GameState, action: GameAction, now = new Date(
       else area.units.push({ countryId: action.countryId, kind: action.kind, count: 1 });
       break;
     }
-    case "MOVE_UNIT": {
-      requireCompatibleArea(action.fromAreaId, action.kind);
-      requireCompatibleArea(action.toAreaId, action.kind);
-      const connection = connectionBetween(action.fromAreaId, action.toAreaId);
-      if (!connection && action.kind !== "air-force") throw new Error("只能移动到相邻区域");
-      if (!canMoveUnit(next, action.fromAreaId, action.toAreaId, action.countryId, action.kind)) {
-        if (connection?.kind === "strait") throw new Error("该阵营目前不能通过此海峡");
-        throw new Error("单位只能在相同地形的相邻区域间移动");
-      }
-      const from = next.areas[action.fromAreaId];
-      const to = next.areas[action.toAreaId];
-      if (!from || !to) throw new Error("区域不存在");
-      const sourceStack = findStack(from, action.countryId, action.kind);
-      if (!sourceStack?.count) throw new Error("没有可移动的单位");
-      sourceStack.count -= 1;
-      if (sourceStack.count === 0) from.units = from.units.filter((stack) => stack !== sourceStack);
-      const targetStack = findStack(to, action.countryId, action.kind);
-      if (targetStack) targetStack.count += 1;
-      else to.units.push({ countryId: action.countryId, kind: action.kind, count: 1 });
-      break;
-    }
     case "REMOVE_UNIT": {
       const area = next.areas[action.areaId];
       if (!area) throw new Error("区域不存在");
@@ -310,6 +313,94 @@ export function reduceGame(state: GameState, action: GameAction, now = new Date(
       if (index < 0) throw new Error("该卡牌不在手牌中");
       zones.hand.splice(index, 1);
       zones.discard.push(action.cardId);
+      break;
+    }
+    case "DISCARD_DECK_CARD": {
+      const zones = next.cardZones[action.countryId];
+      const index = zones.deck.indexOf(action.cardId);
+      if (index < 0) throw new Error("该卡牌不在牌堆中");
+      zones.deck.splice(index, 1);
+      zones.discard.push(action.cardId);
+      break;
+    }
+    case "SEARCH_DECK_CARD": {
+      const zones = next.cardZones[action.countryId];
+      const index = zones.deck.indexOf(action.cardId);
+      if (index < 0) throw new Error("该卡牌不在牌堆中");
+      zones.deck.splice(index, 1);
+      zones.hand.push(action.cardId);
+      break;
+    }
+    case "SHUFFLE_DECK": {
+      const zones = next.cardZones[action.countryId];
+      if (
+        action.order.length !== zones.deck.length ||
+        new Set(action.order).size !== action.order.length ||
+        action.order.some((id) => !zones.deck.includes(id))
+      ) {
+        throw new Error("洗牌顺序无效");
+      }
+      zones.deck = [...action.order];
+      break;
+    }
+    case "MOVE_DECK_CARD": {
+      const zones = next.cardZones[action.countryId];
+      const index = zones.deck.indexOf(action.cardId);
+      if (index < 0) throw new Error("该卡牌不在牌堆中");
+      zones.deck.splice(index, 1);
+      if (action.placement === "top") zones.deck.push(action.cardId);
+      else zones.deck.unshift(action.cardId);
+      break;
+    }
+    case "RECOVER_DISCARD_CARD": {
+      const zones = next.cardZones[action.countryId];
+      const index = zones.discard.indexOf(action.cardId);
+      if (index < 0) throw new Error("该卡牌不在弃牌堆中");
+      zones.discard.splice(index, 1);
+      if (action.destination === "hand") zones.hand.push(action.cardId);
+      else zones.deck.push(action.cardId);
+      break;
+    }
+    case "RESHUFFLE_DISCARD": {
+      const zones = next.cardZones[action.countryId];
+      const combined = [...zones.deck, ...zones.discard];
+      if (
+        action.order.length !== combined.length ||
+        new Set(action.order).size !== action.order.length ||
+        action.order.some((id) => !combined.includes(id))
+      ) {
+        throw new Error("洗回顺序无效");
+      }
+      zones.deck = [...action.order];
+      zones.discard = [];
+      break;
+    }
+    case "PLAY_CARD_TO_SLOT": {
+      const zones = next.cardZones[action.countryId];
+      const index = zones.hand.indexOf(action.cardId);
+      if (index < 0) throw new Error("该卡牌不在手牌中");
+      const card = next.cards[action.cardId];
+      const compatible =
+        action.slot === "status" ? card?.type === "status" || card?.type === "bolster" : card?.type === "response";
+      if (!compatible) throw new Error(action.slot === "status" ? "只有状态或增强牌可进入状态栏" : "只有响应牌可进入响应栏");
+      zones.hand.splice(index, 1);
+      zones[action.slot].push(action.cardId);
+      break;
+    }
+    case "RESOLVE_SLOT_CARD": {
+      const zones = next.cardZones[action.countryId];
+      const index = zones[action.slot].indexOf(action.cardId);
+      if (index < 0) throw new Error("该卡牌不在栏位中");
+      zones[action.slot].splice(index, 1);
+      zones.discard.push(action.cardId);
+      break;
+    }
+    case "RETURN_SLOT_CARD": {
+      const zones = next.cardZones[action.countryId];
+      const index = zones[action.slot].indexOf(action.cardId);
+      if (index < 0) throw new Error("该卡牌不在栏位中");
+      zones[action.slot].splice(index, 1);
+      zones.hand.push(action.cardId);
       break;
     }
     case "ADD_CUSTOM_CARD": {
@@ -370,9 +461,13 @@ function mergeAreaUnits(target: AreaState, source: AreaState): void {
 function normalizeCards(state: GameState): void {
   for (const country of COUNTRIES) {
     const zones = state.cardZones[country.id];
+    zones.status = Array.isArray(zones.status) ? zones.status : [];
+    zones.response = Array.isArray(zones.response) ? zones.response : [];
     zones.deck = zones.deck.filter((id) => !id.includes("-prototype-"));
     zones.hand = zones.hand.filter((id) => !id.includes("-prototype-"));
     zones.discard = zones.discard.filter((id) => !id.includes("-prototype-"));
+    zones.status = zones.status.filter((id) => !id.includes("-prototype-"));
+    zones.response = zones.response.filter((id) => !id.includes("-prototype-"));
   }
   for (const id of Object.keys(state.cards)) {
     if (id.includes("-prototype-")) delete state.cards[id];
@@ -381,7 +476,7 @@ function normalizeCards(state: GameState): void {
   const placed = new Set(
     COUNTRIES.flatMap((country) => {
       const zones = state.cardZones[country.id];
-      return [...zones.deck, ...zones.hand, ...zones.discard];
+      return [...zones.deck, ...zones.hand, ...zones.discard, ...zones.status, ...zones.response];
     }),
   );
 

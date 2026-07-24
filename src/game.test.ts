@@ -24,7 +24,7 @@ describe("prototype game state", () => {
     ]);
   });
 
-  it("places, moves, and removes a unit", () => {
+  it("places and removes a unit without requiring a move workflow", () => {
     let state = createInitialState();
     state = reduceGame(state, {
       type: "PLACE_UNIT",
@@ -32,26 +32,18 @@ describe("prototype game state", () => {
       countryId: "germany",
       kind: "army",
     });
+    expect(state.areas["western-europe"]?.units[0]?.count).toBe(1);
+
     state = reduceGame(state, {
-      type: "MOVE_UNIT",
-      fromAreaId: "western-europe",
-      toAreaId: "germany",
+      type: "REMOVE_UNIT",
+      areaId: "western-europe",
       countryId: "germany",
       kind: "army",
     });
     expect(state.areas["western-europe"]?.units).toHaveLength(0);
-    expect(state.areas.germany?.units[0]?.count).toBe(1);
-
-    state = reduceGame(state, {
-      type: "REMOVE_UNIT",
-      areaId: "germany",
-      countryId: "germany",
-      kind: "army",
-    });
-    expect(state.areas.germany?.units).toHaveLength(0);
   });
 
-  it("rejects invalid unit terrain and non-adjacent movement", () => {
+  it("rejects units placed on incompatible terrain", () => {
     const state = createInitialState();
     expect(() =>
       reduceGame(state, {
@@ -138,7 +130,7 @@ describe("prototype game state", () => {
     expect(Object.values(state.cardZones).every((zones) => zones.hand.length === 7)).toBe(true);
   });
 
-  it("places, freely repositions, and removes an air force token", () => {
+  it("places and removes an air force token", () => {
     let state = createInitialState();
     state = reduceGame(state, {
       type: "PLACE_UNIT",
@@ -146,21 +138,104 @@ describe("prototype game state", () => {
       countryId: "germany",
       kind: "air-force",
     });
-    state = reduceGame(state, {
-      type: "MOVE_UNIT",
-      fromAreaId: "germany",
-      toAreaId: "japan",
-      countryId: "germany",
-      kind: "air-force",
-    });
-    expect(state.areas.japan?.units[0]).toMatchObject({ countryId: "germany", kind: "air-force", count: 1 });
+    expect(state.areas.germany?.units[0]).toMatchObject({ countryId: "germany", kind: "air-force", count: 1 });
     state = reduceGame(state, {
       type: "REMOVE_UNIT",
-      areaId: "japan",
+      areaId: "germany",
       countryId: "germany",
       kind: "air-force",
     });
-    expect(state.areas.japan?.units).toHaveLength(0);
+    expect(state.areas.germany?.units).toHaveLength(0);
+  });
+
+  it("preserves deck order while drawing, finding, discarding, recovering, and shuffling", () => {
+    let state = createInitialState();
+    const originalTop = state.cardZones.germany.deck.at(-1)!;
+    state = reduceGame(state, { type: "DRAW_CARD", countryId: "germany" });
+    expect(state.cardZones.germany.hand.at(-1)).toBe(originalTop);
+
+    const reversed = state.cardZones.germany.deck.slice().reverse();
+    state = reduceGame(state, { type: "SHUFFLE_DECK", countryId: "germany", order: reversed });
+    expect(state.cardZones.germany.deck).toEqual(reversed);
+
+    const foundCard = state.cardZones.germany.deck[3]!;
+    state = reduceGame(state, { type: "SEARCH_DECK_CARD", countryId: "germany", cardId: foundCard });
+    expect(state.cardZones.germany.hand.at(-1)).toBe(foundCard);
+    expect(state.cardZones.germany.deck).not.toContain(foundCard);
+
+    const discardedFromDeck = state.cardZones.germany.deck[2]!;
+    state = reduceGame(state, { type: "DISCARD_DECK_CARD", countryId: "germany", cardId: discardedFromDeck });
+    expect(state.cardZones.germany.discard.at(-1)).toBe(discardedFromDeck);
+    state = reduceGame(state, {
+      type: "RECOVER_DISCARD_CARD",
+      countryId: "germany",
+      cardId: discardedFromDeck,
+      destination: "deck-top",
+    });
+    expect(state.cardZones.germany.deck.at(-1)).toBe(discardedFromDeck);
+
+    const bottomCandidate = state.cardZones.germany.deck.at(-1)!;
+    state = reduceGame(state, {
+      type: "MOVE_DECK_CARD",
+      countryId: "germany",
+      cardId: bottomCandidate,
+      placement: "bottom",
+    });
+    expect(state.cardZones.germany.deck[0]).toBe(bottomCandidate);
+
+    const handCard = state.cardZones.germany.hand.at(-1)!;
+    state = reduceGame(state, { type: "DISCARD_CARD", countryId: "germany", cardId: handCard });
+    const combinedOrder = [...state.cardZones.germany.deck, ...state.cardZones.germany.discard].reverse();
+    state = reduceGame(state, { type: "RESHUFFLE_DISCARD", countryId: "germany", order: combinedOrder });
+    expect(state.cardZones.germany.discard).toHaveLength(0);
+    expect(state.cardZones.germany.deck).toEqual(combinedOrder);
+  });
+
+  it("keeps status and response cards in dedicated active slots", () => {
+    let state = createInitialState();
+    const statusCard = Object.values(state.cards).find(
+      (card) =>
+        card.countryId === "germany" &&
+        (card.type === "status" || card.type === "bolster") &&
+        state.cardZones.germany.deck.includes(card.id),
+    )!;
+    const responseCard = Object.values(state.cards).find(
+      (card) => card.type === "response" && state.cardZones[card.countryId].deck.includes(card.id),
+    )!;
+    const responseCountry = responseCard.countryId;
+
+    state = reduceGame(state, { type: "SEARCH_DECK_CARD", countryId: "germany", cardId: statusCard.id });
+    state = reduceGame(state, {
+      type: "PLAY_CARD_TO_SLOT",
+      countryId: "germany",
+      cardId: statusCard.id,
+      slot: "status",
+    });
+    expect(state.cardZones.germany.status).toEqual([statusCard.id]);
+    state = reduceGame(state, {
+      type: "RETURN_SLOT_CARD",
+      countryId: "germany",
+      cardId: statusCard.id,
+      slot: "status",
+    });
+    expect(state.cardZones.germany.hand).toContain(statusCard.id);
+
+    state = reduceGame(state, { type: "SEARCH_DECK_CARD", countryId: responseCountry, cardId: responseCard.id });
+    state = reduceGame(state, {
+      type: "PLAY_CARD_TO_SLOT",
+      countryId: responseCountry,
+      cardId: responseCard.id,
+      slot: "response",
+    });
+    expect(state.cardZones[responseCountry].response).toEqual([responseCard.id]);
+    state = reduceGame(state, {
+      type: "RESOLVE_SLOT_CARD",
+      countryId: responseCountry,
+      cardId: responseCard.id,
+      slot: "response",
+    });
+    expect(state.cardZones[responseCountry].response).toHaveLength(0);
+    expect(state.cardZones[responseCountry].discard).toContain(responseCard.id);
   });
 
   it("advances through all six countries and increments the round", () => {
