@@ -2063,6 +2063,19 @@ textarea {
   box-shadow: var(--shadow);
 }
 
+.card-zone-bar {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  padding: 6px;
+  overflow: hidden;
+  border-top: 4px solid var(--country-color);
+  border-radius: 12px;
+  color: #eef3e9;
+  background: #17231d;
+  box-shadow: var(--shadow);
+}
+
 .country-tabs--compact {
   gap: 3px;
 }
@@ -2416,6 +2429,7 @@ textarea {
 
   .command-rail,
   .area-command,
+  .card-zone-bar,
   .hand-dock--landscape {
     grid-column: 1;
   }
@@ -2520,7 +2534,7 @@ textarea {
   .war-table {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(235px, 31vw);
-    grid-template-rows: minmax(0, 1fr) 67px 92px;
+    grid-template-rows: minmax(0, 1fr) 60px 42px 80px;
     gap: 5px;
     height: 100%;
   }
@@ -2532,7 +2546,7 @@ textarea {
 
   .war-table > .command-rail {
     grid-column: 2;
-    grid-row: 1 / 4;
+    grid-row: 1 / 5;
   }
 
   .war-table > .area-command {
@@ -2540,9 +2554,14 @@ textarea {
     grid-row: 2;
   }
 
-  .war-table > .hand-dock--landscape {
+  .war-table > .card-zone-bar {
     grid-column: 1;
     grid-row: 3;
+  }
+
+  .war-table > .hand-dock--landscape {
+    grid-column: 1;
+    grid-row: 4;
   }
 
   .war-table > .view-section {
@@ -2551,12 +2570,12 @@ textarea {
 
   .battle-map-pane {
     display: grid;
-    grid-template-rows: 32px minmax(0, 1fr);
+    grid-template-rows: 26px minmax(0, 1fr);
     border-radius: 9px;
   }
 
   .map-commandbar {
-    min-height: 32px;
+    min-height: 26px;
     padding: 2px 5px;
   }
 
@@ -2593,10 +2612,10 @@ textarea {
     inset: auto;
     display: grid;
     grid-template-columns: minmax(84px, 0.7fr) minmax(140px, 1.2fr) minmax(110px, 1fr);
-    grid-template-rows: 27px 27px;
+    grid-template-rows: 24px 24px;
     width: 100%;
-    height: 67px;
-    gap: 3px;
+    height: 60px;
+    gap: 2px;
     padding: 5px;
     border-radius: 9px;
     box-shadow: none;
@@ -2626,7 +2645,7 @@ textarea {
   }
 
   .inline-picker button {
-    min-height: 27px;
+    min-height: 24px;
     padding: 2px 5px;
   }
 
@@ -2645,15 +2664,34 @@ textarea {
   }
 
   .command-rail {
-    grid-template-rows: 33px 52px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     gap: 4px;
     padding: 5px;
     border-radius: 9px;
   }
 
-  .country-tabs--compact button {
-    min-height: 30px;
+  .card-zone-bar {
+    grid-template-columns: minmax(170px, 1.15fr) minmax(0, 1fr);
+    height: 42px;
+    gap: 4px;
     padding: 3px;
+    border-top-width: 3px;
+    border-radius: 8px;
+  }
+
+  .card-zone-bar .country-tabs--compact {
+    min-width: 0;
+  }
+
+  .card-zone-bar .active-slots {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
+  }
+
+  .country-tabs--compact button {
+    min-height: 33px;
+    padding: 2px;
   }
 
   .country-tabs--compact button span {
@@ -2667,16 +2705,35 @@ textarea {
   }
 
   .active-slot {
-    padding: 3px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 3px;
+    padding: 2px 3px;
+    align-items: center;
   }
 
   .active-slot header {
+    display: grid;
+    gap: 0;
     margin: 0;
   }
 
+  .active-slot header strong {
+    font-size: 0.52rem;
+    white-space: nowrap;
+  }
+
   .active-slot > div > button {
-    min-width: 76px;
-    padding: 3px;
+    min-width: 70px;
+    padding: 2px 3px;
+  }
+
+  .active-slot > div {
+    min-width: 0;
+  }
+
+  .active-slot p {
+    white-space: nowrap;
   }
 
   .card-inspector--rail {
@@ -2724,7 +2781,7 @@ textarea {
     display: grid;
     grid-template-columns: minmax(92px, 30%) minmax(0, 1fr);
     gap: 5px;
-    height: 92px;
+    height: 80px;
     padding: 5px;
     border-radius: 9px;
   }
@@ -2749,18 +2806,18 @@ textarea {
 
   .hand-rack-actions {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     align-self: end;
   }
 
   .hand-rack-actions button {
-    min-height: 27px;
+    min-height: 24px;
     padding: 2px;
     font-size: 0.54rem;
   }
 
   .hand-dock--landscape .hand-carousel {
-    height: 82px;
+    height: 70px;
     margin: 0;
     padding: 1px 2px 3px;
   }
@@ -2770,12 +2827,12 @@ textarea {
     display: block;
     width: 70px;
     min-width: 70px;
-    height: 78px;
+    height: 66px;
     border-radius: 6px;
   }
 
   .hand-dock--landscape .hand-card__image {
-    height: 74px;
+    height: 62px;
     aspect-ratio: auto;
   }
 

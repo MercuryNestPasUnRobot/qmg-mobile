@@ -485,13 +485,21 @@ function renderCommandRail(): string {
 
   return `
     <aside class="command-rail" style="--country-color:${countryById(handCountryId).color}">
+      ${selected ? renderCardInspector(selected, handCountryId) : '<div class="rail-empty">选择一张手牌查看技能</div>'}
+    </aside>
+  `;
+}
+
+function renderCardZoneBar(): string {
+  ensureHandCountry();
+  return `
+    <section class="card-zone-bar" style="--country-color:${countryById(handCountryId).color}" aria-label="国家、状态牌与响应牌">
       ${renderCountryTabs()}
       <div class="active-slots">
         ${renderActiveSlot("status", "状态栏")}
         ${renderActiveSlot("response", "响应栏")}
       </div>
-      ${selected ? renderCardInspector(selected, handCountryId) : '<div class="rail-empty">选择一张手牌查看技能</div>'}
-    </aside>
+    </section>
   `;
 }
 
@@ -724,6 +732,7 @@ function renderBoard(): string {
       ${renderMap()}
       ${renderCommandRail()}
       ${renderAreaDetail()}
+      ${renderCardZoneBar()}
       ${renderHandDock()}
     </div>
     ${renderCardManager()}
