@@ -1,0 +1,26 @@
+{
+  "name": "战场军需官 · 随身战局",
+  "short_name": "随身军需官",
+  "description": "本地单人双阵营桌游辅助原型",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#16211c",
+  "theme_color": "#16211c",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./maskable-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

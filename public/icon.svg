@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="随身军需官">
+  <rect width="512" height="512" rx="112" fill="#16211c"/>
+  <path d="M256 72 414 164v184L256 440 98 348V164z" fill="#f1e9d8"/>
+  <path d="M256 112 378 183v142L256 396l-122-71V183z" fill="#475a45"/>
+  <path d="M256 156 320 272H192z" fill="#f1e9d8"/>
+  <circle cx="256" cy="304" r="31" fill="#a74c3c"/>
+</svg>
