@@ -1,9 +1,8 @@
 import "./styles.css";
-import { PHASES, type Card, type CardType, type GameAction, type UnitStack } from "./game";
+import { type Card, type CardType, type GameAction, type UnitStack } from "./game";
 import {
   AREAS,
   COUNTRIES,
-  FACTION_NAMES,
   TURN_ORDER,
   areaById,
   connectionDisplayKind,
@@ -20,14 +19,6 @@ import {
 import { GameStore } from "./store";
 
 type ViewId = "board" | "log" | "save";
-
-interface PrivacyGate {
-  target: Faction;
-  title: string;
-  detail: string;
-  allowCancel: boolean;
-  confirm: () => void;
-}
 
 const appElement = document.querySelector<HTMLDivElement>("#app");
 if (!appElement) throw new Error("App root not found");
@@ -46,13 +37,7 @@ let cardPanelMode: "deck" | "discard" | "custom" | null = null;
 let cardSearch = "";
 let toastMessage = "";
 let toastTimer: number | undefined;
-let privacyGate: PrivacyGate | null = {
-  target: store.state.activeFaction,
-  title: "战局已锁定",
-  detail: `请把手机交给${FACTION_NAMES[store.state.activeFaction]}玩家。`,
-  allowCancel: false,
-  confirm: () => undefined,
-};
+const scrollMemory = new Map<string, { left: number; top: number }>();
 
 const CARD_TYPE_NAMES: Record<CardType, string> = {
   build: "建军",
@@ -110,40 +95,8 @@ function execute(action: GameAction, success?: string): void {
   }
 }
 
-function askForFaction(
-  target: Faction,
-  title: string,
-  detail: string,
-  confirm: () => void,
-  allowCancel = true,
-): void {
-  privacyGate = { target, title, detail, confirm, allowCancel };
-  render();
-}
-
 function factionBadge(faction: Faction): string {
   return `<span class="faction-badge faction-badge--${faction}">${faction === "axis" ? "AXIS" : "ALLIES"}</span>`;
-}
-
-function renderPrivacyGate(gate: PrivacyGate): string {
-  return `
-    <main class="privacy-gate privacy-gate--${gate.target}" aria-labelledby="privacy-title">
-      <div class="privacy-mark" aria-hidden="true">✦</div>
-      ${factionBadge(gate.target)}
-      <p class="eyebrow">隐私交接</p>
-      <h1 id="privacy-title">${escapeHtml(gate.title)}</h1>
-      <p>${escapeHtml(gate.detail)}</p>
-      <div class="privacy-warning">确认前不会显示任何手牌内容</div>
-      <button class="button button--primary button--wide" data-action="privacy-confirm">
-        我是${FACTION_NAMES[gate.target]}玩家
-      </button>
-      ${
-        gate.allowCancel
-          ? '<button class="button button--ghost button--wide" data-action="privacy-cancel">取消交接</button>'
-          : ""
-      }
-    </main>
-  `;
 }
 
 function renderHeader(): string {
@@ -166,9 +119,6 @@ function renderHeader(): string {
             (country) =>
               `<option value="${country.id}" ${country.id === state.turnCountry ? "selected" : ""}>${country.name}</option>`,
           ).join("")}
-        </select>
-        <select id="turn-phase" aria-label="当前阶段">
-          ${PHASES.map((phase) => `<option ${phase === state.phase ? "selected" : ""}>${phase}</option>`).join("")}
         </select>
       </div>
       <div class="score-strip score-strip--compact" aria-label="胜利点">
@@ -279,7 +229,7 @@ function renderAreaDetail(): string {
           .join("")}
         <button class="quick-place" data-action="quick-place-unit" aria-label="在${definition.name}放置${unitName(selectedUnitKind)}">＋ 放置</button>
       </div>
-      <div class="unit-strip">
+      <div class="unit-strip" data-scroll-key="unit-strip">
         ${
           stacks.length
             ? stacks
@@ -379,7 +329,6 @@ function renderMap(): string {
             ).join("")}
           </div>
         </div>
-        ${renderAreaDetail()}
       </div>
     </section>
   `;
@@ -503,7 +452,7 @@ function renderActiveSlot(slot: "status" | "response", label: string): string {
   return `
     <section class="active-slot active-slot--${slot}">
       <header><strong>${label}</strong><span>${cards.length}</span></header>
-      <div>
+      <div data-scroll-key="${slot}-slot">
         ${
           cards.length
             ? cards
@@ -569,7 +518,7 @@ function renderHandDock(): string {
           <button data-action="open-card-panel" data-panel="custom">＋卡牌</button>
         </div>
       </div>
-      <div class="hand-carousel" aria-label="${country.name}手牌">
+      <div class="hand-carousel" data-scroll-key="hand-carousel" aria-label="${country.name}手牌">
         ${handCards.length ? handCards.map((card) => renderHandCard(card, country.id)).join("") : '<div class="empty-state">手牌为空</div>'}
       </div>
     </section>
@@ -651,7 +600,7 @@ function renderCardManager(): string {
           }
         </div>
         <p class="order-note">${cardPanelMode === "deck" ? "列表从牌顶到牌底；抽牌始终取 #1。" : "列表按最新弃置到最早弃置排列。"}</p>
-        <div class="manager-card-list">
+        <div class="manager-card-list" data-scroll-key="manager-card-list">
           ${cards.length ? cards.map((card, index) => renderManagerCardRow(card, index + 1, cardPanelMode as "deck" | "discard")).join("") : '<div class="empty-state">没有匹配卡牌</div>'}
         </div>
       </section>
@@ -774,7 +723,10 @@ function renderBoard(): string {
     <div class="war-table">
       ${renderMap()}
       ${renderCommandRail()}
-      ${renderHandDock()}
+      <div class="bottom-console">
+        ${renderAreaDetail()}
+        ${renderHandDock()}
+      </div>
     </div>
     ${renderCardManager()}
   `;
@@ -807,11 +759,6 @@ function renderNavigation(): string {
 }
 
 function render(): void {
-  if (privacyGate) {
-    app.innerHTML = renderPrivacyGate(privacyGate);
-    return;
-  }
-
   app.innerHTML = `
     <div class="app-shell">
       ${renderHeader()}
@@ -820,8 +767,25 @@ function render(): void {
       ${toastMessage ? `<div class="toast" role="status">${escapeHtml(toastMessage)}</div>` : ""}
     </div>
   `;
+  restoreScrollPositions();
   const viewport = app.querySelector<HTMLElement>(".map-viewport");
   if (viewport) viewport.scrollLeft = mapWidth === 0 ? 0 : mapScrollLeft;
+}
+
+function captureScrollPositions(): void {
+  app.querySelectorAll<HTMLElement>("[data-scroll-key]").forEach((element) => {
+    const key = element.dataset.scrollKey;
+    if (key) scrollMemory.set(key, { left: element.scrollLeft, top: element.scrollTop });
+  });
+}
+
+function restoreScrollPositions(): void {
+  app.querySelectorAll<HTMLElement>("[data-scroll-key]").forEach((element) => {
+    const position = scrollMemory.get(element.dataset.scrollKey ?? "");
+    if (!position) return;
+    element.scrollLeft = position.left;
+    element.scrollTop = position.top;
+  });
 }
 
 function shuffled(ids: readonly string[]): string[] {
@@ -837,19 +801,8 @@ app.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-action]");
   if (!button || button.disabled) return;
   const action = button.dataset.action;
+  captureScrollPositions();
 
-  if (action === "privacy-confirm" && privacyGate) {
-    const callback = privacyGate.confirm;
-    privacyGate = null;
-    callback();
-    render();
-    return;
-  }
-  if (action === "privacy-cancel") {
-    privacyGate = null;
-    render();
-    return;
-  }
   if (action === "change-view") {
     currentView = button.dataset.view as ViewId;
     render();
@@ -873,56 +826,40 @@ app.addEventListener("click", (event) => {
   if (action === "switch-faction") {
     const target = button.dataset.faction as Faction;
     if (target === store.state.activeFaction) return;
-    askForFaction(
-      target,
-      `交给${FACTION_NAMES[target]}`,
-      `请先把手机交给${FACTION_NAMES[target]}玩家，再由对方确认。`,
-      () => {
-        store.execute({ type: "SWITCH_FACTION", faction: target });
-        handCountryId = countriesForFaction(target)[0]!.id;
-        unitCountryId = handCountryId;
-        selectedCardId = null;
-        cardPanelMode = null;
-        showToast("阵营已切换");
-      },
-    );
+    store.execute({ type: "SWITCH_FACTION", faction: target });
+    handCountryId = countriesForFaction(target)[0]!.id;
+    unitCountryId = handCountryId;
+    selectedCardId = null;
+    cardPanelMode = null;
+    showToast("阵营已切换");
     return;
   }
   if (action === "end-turn") {
     const currentIndex = TURN_ORDER.indexOf(store.state.turnCountry);
     const nextCountry = TURN_ORDER[(currentIndex + 1) % TURN_ORDER.length]!;
-    const target = countryById(nextCountry).faction;
-    askForFaction(
-      target,
-      `${countryById(store.state.turnCountry).name}回合结束`,
-      `下一位是${countryById(nextCountry).name}。请交接手机后确认。`,
-      () => {
-        store.execute({ type: "END_TURN" });
-        currentView = "board";
-        handCountryId = countriesForFaction(target)[0]!.id;
-        unitCountryId = handCountryId;
-        selectedCardId = null;
-        cardPanelMode = null;
-        showToast(`现在是${countryById(nextCountry).name}回合`);
-      },
-    );
+    store.execute({ type: "END_TURN" });
+    currentView = "board";
+    handCountryId = nextCountry;
+    unitCountryId = nextCountry;
+    selectedCardId = null;
+    cardPanelMode = null;
+    showToast(`现在是${countryById(nextCountry).name}回合`);
     return;
   }
   if (action === "undo") {
-    const previousFaction = store.state.activeFaction;
     if (!store.undo()) {
       showToast("没有可撤销的操作");
       return;
     }
-    if (store.state.activeFaction !== previousFaction) {
-      askForFaction(
-        store.state.activeFaction,
-        "撤销后阵营已改变",
-        `请把手机交给${FACTION_NAMES[store.state.activeFaction]}玩家。`,
-        () => showToast("已撤销"),
-        false,
-      );
-    } else showToast("已撤销");
+    const turnCountry = countryById(store.state.turnCountry);
+    handCountryId =
+      turnCountry.faction === store.state.activeFaction
+        ? turnCountry.id
+        : countriesForFaction(store.state.activeFaction)[0]!.id;
+    unitCountryId = handCountryId;
+    selectedCardId = null;
+    cardPanelMode = null;
+    showToast("已撤销");
     return;
   }
   if (action === "new-game") {
@@ -935,7 +872,7 @@ app.addEventListener("click", (event) => {
     unitCountryId = handCountryId;
     selectedCardId = null;
     cardPanelMode = null;
-    askForFaction("axis", "新战局已就绪", "由德国开始。请把手机交给 Axis 轴心国玩家。", () => undefined, false);
+    showToast("新战局已就绪");
     return;
   }
   if (action === "select-hand-country") {
@@ -953,7 +890,10 @@ app.addEventListener("click", (event) => {
     return;
   }
   if (action === "select-unit-country") {
-    unitCountryId = button.dataset.countryId as CountryId;
+    handCountryId = button.dataset.countryId as CountryId;
+    unitCountryId = handCountryId;
+    selectedCardId = null;
+    cardPanelMode = null;
     render();
     return;
   }
@@ -1118,8 +1058,10 @@ app.addEventListener(
   "scroll",
   (event) => {
     const target = event.target;
-    if (target instanceof HTMLElement && target.classList.contains("map-viewport")) {
-      mapScrollLeft = target.scrollLeft;
+    if (target instanceof HTMLElement) {
+      if (target.classList.contains("map-viewport")) mapScrollLeft = target.scrollLeft;
+      const key = target.dataset.scrollKey;
+      if (key) scrollMemory.set(key, { left: target.scrollLeft, top: target.scrollTop });
     }
   },
   true,
@@ -1127,30 +1069,17 @@ app.addEventListener(
 
 app.addEventListener("change", (event) => {
   const target = event.target as HTMLInputElement | HTMLSelectElement;
-  if (target.id === "turn-phase") {
-    execute({ type: "SET_PHASE", phase: target.value as (typeof PHASES)[number] }, "阶段已更新");
-    return;
-  }
+  captureScrollPositions();
   if (target.id === "turn-country") {
     const countryId = target.value as CountryId;
     const faction = countryById(countryId).faction;
-    const commit = () => {
-      store.execute({ type: "SET_TURN_COUNTRY", countryId });
-      if (faction !== store.state.activeFaction) store.execute({ type: "SWITCH_FACTION", faction });
-      handCountryId = countriesForFaction(faction)[0]!.id;
-      unitCountryId = handCountryId;
-      selectedCardId = null;
-      cardPanelMode = null;
-      showToast(`现在是${countryById(countryId).name}回合`);
-    };
-    if (faction !== store.state.activeFaction) {
-      askForFaction(
-        faction,
-        `切换至${countryById(countryId).name}`,
-        `请把手机交给${FACTION_NAMES[faction]}玩家。`,
-        commit,
-      );
-    } else commit();
+    store.execute({ type: "SET_TURN_COUNTRY", countryId });
+    if (faction !== store.state.activeFaction) store.execute({ type: "SWITCH_FACTION", faction });
+    handCountryId = countryId;
+    unitCountryId = countryId;
+    selectedCardId = null;
+    cardPanelMode = null;
+    showToast(`现在是${countryById(countryId).name}回合`);
     return;
   }
   if (target.id === "import-file" && target instanceof HTMLInputElement && target.files?.[0]) {
@@ -1161,17 +1090,15 @@ app.addEventListener("change", (event) => {
         store.importJson(text);
         currentView = "board";
         selectedAreaId = AREAS.some((area) => area.id === selectedAreaId) ? selectedAreaId : AREAS[0]!.id;
-        handCountryId = countriesForFaction(store.state.activeFaction)[0]!.id;
+        const turnCountry = countryById(store.state.turnCountry);
+        handCountryId =
+          turnCountry.faction === store.state.activeFaction
+            ? turnCountry.id
+            : countriesForFaction(store.state.activeFaction)[0]!.id;
         unitCountryId = handCountryId;
         selectedCardId = null;
         cardPanelMode = null;
-        askForFaction(
-          store.state.activeFaction,
-          "存档已导入",
-          `请把手机交给${FACTION_NAMES[store.state.activeFaction]}玩家后确认。`,
-          () => showToast("存档导入成功"),
-          false,
-        );
+        showToast("存档导入成功");
       })
       .catch((error: unknown) => showToast(error instanceof Error ? error.message : "导入失败"));
   }
@@ -1180,6 +1107,7 @@ app.addEventListener("change", (event) => {
 app.addEventListener("input", (event) => {
   const target = event.target;
   if (!(target instanceof HTMLInputElement) || target.id !== "card-search") return;
+  captureScrollPositions();
   cardSearch = target.value;
   const cursor = target.selectionStart ?? cardSearch.length;
   render();
