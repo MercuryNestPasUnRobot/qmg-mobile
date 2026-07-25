@@ -14,6 +14,8 @@ import {
   type RandomUint32,
 } from "./game";
 import { COUNTRIES, type CountryId } from "./prototype-data";
+import { answerBotRequest, startBotTurn } from "./bot/engine";
+import type { BotAnswer } from "./bot/types";
 
 const STORAGE_KEY = "qmg-mobile.prototype.save.v1";
 const MAX_UNDO = 50;
@@ -190,6 +192,25 @@ export class GameStore {
 
   canUndo(): boolean {
     return this.history.length > 0;
+  }
+
+  startCurrentBotTurn(): boolean {
+    const next = startBotTurn(this.state);
+    if (next === this.state) return false;
+    this.history.push({ state: this.state, description: `开始 ${this.state.turnCountry} Bot 回合` });
+    if (this.history.length > MAX_UNDO) this.history.shift();
+    this.state = next;
+    this.persist();
+    return true;
+  }
+
+  answerCurrentBotRequest(answer: BotAnswer): void {
+    const prompt = this.state.bot.session?.pendingManualRequest?.prompt ?? "Bot 请求";
+    const next = answerBotRequest(this.state, answer);
+    this.history.push({ state: this.state, description: prompt });
+    if (this.history.length > MAX_UNDO) this.history.shift();
+    this.state = next;
+    this.persist();
   }
 
   newGame(now = new Date(), randomUint32?: RandomUint32): void {

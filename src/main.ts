@@ -23,6 +23,7 @@ import {
   type UnitKind,
 } from "./prototype-data";
 import { GameStore } from "./store";
+import type { BotAnswer } from "./bot/types";
 
 type ViewId = "board" | "log" | "save";
 
@@ -46,6 +47,7 @@ let selectedAuxiliary: AuxiliaryNation | null = null;
 let cardPanelMode: "deck" | "discard" | "custom" | null = null;
 let cardSearch = "";
 let toastMessage = "";
+let botPanelCollapsed = false;
 let toastTimer: number | undefined;
 const scrollMemory = new Map<string, { left: number; top: number }>();
 
@@ -112,6 +114,15 @@ function factionBadge(faction: Faction): string {
 function renderHeader(): string {
   const state = store.state;
   const turnCountry = countryById(state.turnCountry);
+  const botSession = state.bot.session;
+  const turnLabel =
+    state.bot.controllers[state.turnCountry] === "BOT"
+      ? botSession?.isComplete
+        ? "下一回合 →"
+        : botSession
+          ? "查看 Bot"
+          : "开始 Bot"
+      : "结束回合 →";
   return `
     <header class="tactical-header">
       <div class="tactical-brand">
@@ -157,7 +168,7 @@ function renderHeader(): string {
         <button class="icon-button" data-action="change-view" data-view="save" aria-label="存档" title="存档">↥</button>
         <button class="icon-button" data-action="undo" ${store.canUndo() ? "" : "disabled"} aria-label="撤销上一步" title="撤销">↶</button>
         <button class="icon-button" data-action="new-game" aria-label="新游戏" title="新游戏">＋</button>
-        <button class="button button--turn" data-action="end-turn">结束回合 →</button>
+        <button class="button button--turn" data-action="end-turn">${turnLabel}</button>
       </div>
     </header>
   `;
@@ -849,19 +860,73 @@ function renderNavigation(): string {
 }
 
 function renderStartScreen(): string {
+  const state = store.state;
   return `
     <main class="game-start-screen">
       <section class="game-start-card">
         <span class="game-start-mark" aria-hidden="true">QMG</span>
         <p class="eyebrow">战场军需官 · 手机版</p>
         <h1>准备开始</h1>
-        <div class="start-settings-placeholder">
-          <strong>基础设置</strong>
-          <p>设置项目将在后续版本加入。</p>
+        <div class="start-settings">
+          <strong>国家控制方式</strong>
+          <div class="controller-grid">
+            ${COUNTRIES.map(
+              (country) => `
+                <button data-action="toggle-controller" data-country-id="${country.id}" class="${state.bot.controllers[country.id] === "BOT" ? "is-bot" : ""}">
+                  <span>${country.name}</span><b>${state.bot.controllers[country.id]}</b>
+                </button>
+              `,
+            ).join("")}
+          </div>
+          <button class="total-war-toggle ${state.bot.config.totalWarEnabled ? "is-active" : ""}" data-action="toggle-total-war">
+            Total War：${state.bot.config.totalWarEnabled ? "开启" : "关闭"}
+          </button>
+          <p>Bot 只会在你点击回合按钮后运行；完成后会停住等待下一次点击。</p>
         </div>
         <button class="button button--primary button--wide" data-action="enter-game">进入战局</button>
       </section>
     </main>
+  `;
+}
+
+const BOT_ANSWER_LABELS: Record<string, string> = {
+  YES: "是",
+  NO: "否",
+  EFFECTIVE: "有效",
+  INEFFECTIVE: "无效，继续搜索",
+  COMPLETED: "已完成",
+  CANNOT_EXECUTE: "无法执行，改判无效",
+  BUILD_ARMY: "Build Army",
+  BUILD_NAVY: "Build Navy",
+};
+
+function renderBotPanel(): string {
+  const session = store.state.bot.session;
+  if (!session || botPanelCollapsed) return "";
+  const manualRequest = session.pendingManualRequest;
+  const card = manualRequest?.associatedCardId ? store.state.cards[manualRequest.associatedCardId] : null;
+  return `
+    <aside class="bot-turn-panel" aria-live="polite">
+      <header>
+        <div><span>SOLO BOT · R${session.roundNumber}</span><strong>${countryById(session.countryId).name} ${session.turnMode ?? "判断回合模式"}</strong></div>
+        <button data-action="collapse-bot-panel" aria-label="收起 Bot 面板">—</button>
+      </header>
+      ${
+        manualRequest
+          ? `
+            <p>${escapeHtml(manualRequest.prompt)}</p>
+            ${card ? `<article class="bot-card-summary"><strong>${escapeHtml(card.name)}</strong><span>${escapeHtml(card.description)}</span></article>` : ""}
+            <div class="bot-answer-row">
+              ${manualRequest.answers.map((answer) => `<button data-action="answer-bot" data-answer="${answer}">${BOT_ANSWER_LABELS[answer] ?? answer}</button>`).join("")}
+            </div>
+          `
+          : `<p>${session.isComplete ? "该国 Bot 回合已完成。你仍可手动调整局面；点击顶部“下一回合”后才会进入下一个国家。" : "Bot 正在处理自动步骤。"}</p>`
+      }
+      <details>
+        <summary>Bot Turn Log · ${session.log.length}</summary>
+        <ol>${session.log.map((entry) => `<li>${escapeHtml(entry)}</li>`).join("")}</ol>
+      </details>
+    </aside>
   `;
 }
 
@@ -875,6 +940,8 @@ function render(): void {
       ${renderHeader()}
       <main class="content">${renderCurrentView()}</main>
       ${renderNavigation()}
+      ${renderBotPanel()}
+      ${botPanelCollapsed && store.state.bot.session ? '<button class="bot-panel-reopen" data-action="reopen-bot-panel">BOT 待处理</button>' : ""}
       ${toastMessage ? `<div class="toast" role="status">${escapeHtml(toastMessage)}</div>` : ""}
     </div>
   `;
@@ -920,6 +987,42 @@ app.addEventListener("click", (event) => {
     render();
     return;
   }
+  if (action === "toggle-controller") {
+    const countryId = button.dataset.countryId as CountryId;
+    const controller = store.state.bot.controllers[countryId] === "BOT" ? "HUMAN" : "BOT";
+    store.execute({ type: "SET_CONTROLLER", countryId, controller });
+    render();
+    return;
+  }
+  if (action === "toggle-total-war") {
+    store.execute({
+      type: "SET_BOT_CONFIG",
+      totalWarEnabled: !store.state.bot.config.totalWarEnabled,
+      discardMode: store.state.bot.config.totalWarDiscardMode,
+    });
+    render();
+    return;
+  }
+  if (action === "collapse-bot-panel") {
+    botPanelCollapsed = true;
+    render();
+    return;
+  }
+  if (action === "reopen-bot-panel") {
+    botPanelCollapsed = false;
+    render();
+    return;
+  }
+  if (action === "answer-bot") {
+    try {
+      store.answerCurrentBotRequest(button.dataset.answer as BotAnswer);
+      botPanelCollapsed = false;
+      render();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Bot 无法继续");
+    }
+    return;
+  }
   if (action === "change-view") {
     currentView = button.dataset.view as ViewId;
     render();
@@ -961,6 +1064,19 @@ app.addEventListener("click", (event) => {
     return;
   }
   if (action === "end-turn") {
+    const session = store.state.bot.session;
+    if (session && !session.isComplete) {
+      botPanelCollapsed = false;
+      render();
+      return;
+    }
+    if (store.state.bot.controllers[store.state.turnCountry] === "BOT" && !session) {
+      store.startCurrentBotTurn();
+      botPanelCollapsed = false;
+      render();
+      return;
+    }
+    if (session?.isComplete) store.execute({ type: "CLEAR_BOT_SESSION" });
     const currentIndex = TURN_ORDER.indexOf(store.state.turnCountry);
     const nextCountry = TURN_ORDER[(currentIndex + 1) % TURN_ORDER.length]!;
     store.execute({ type: "END_TURN" });
@@ -969,6 +1085,8 @@ app.addEventListener("click", (event) => {
     unitCountryId = nextCountry;
     selectedCardId = null;
     cardPanelMode = null;
+    if (store.state.bot.controllers[nextCountry] === "BOT") store.startCurrentBotTurn();
+    botPanelCollapsed = false;
     showToast(`现在是${countryById(nextCountry).name}回合`);
     return;
   }
@@ -1254,6 +1372,7 @@ app.addEventListener("change", (event) => {
   if (target.id === "turn-country") {
     const countryId = target.value as CountryId;
     const faction = countryById(countryId).faction;
+    if (store.state.bot.session) store.execute({ type: "CLEAR_BOT_SESSION" });
     store.execute({ type: "SET_TURN_COUNTRY", countryId });
     if (faction !== store.state.activeFaction) store.execute({ type: "SWITCH_FACTION", faction });
     handCountryId = countryId;
