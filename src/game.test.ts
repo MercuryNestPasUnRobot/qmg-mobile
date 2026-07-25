@@ -178,6 +178,25 @@ describe("prototype game state", () => {
     expect(connectionBetween("east-pacific", "southeast-pacific")?.kind).toBe("border");
   });
 
+  it("includes Vladivostok and the Caspian Sea with their map-defined connections", () => {
+    expect(AREAS.filter((area) => area.kind === "land")).toHaveLength(34);
+    expect(AREAS.filter((area) => area.kind === "sea")).toHaveLength(18);
+    expect(areaById("vladivostok")).toMatchObject({ name: "海参崴", kind: "land" });
+    expect(areaById("caspian-sea")).toMatchObject({ name: "里海", kind: "sea" });
+
+    const neighbors = (areaId: string) =>
+      MAP_CONNECTIONS.filter((connection) => connection.a === areaId || connection.b === areaId)
+        .map((connection) => (connection.a === areaId ? connection.b : connection.a))
+        .sort();
+
+    expect(neighbors("vladivostok")).toEqual(["mongolia", "north-pacific", "sea-of-japan", "siberia"]);
+    expect(neighbors("caspian-sea")).toEqual(["kazakhstan", "middle-east", "ukraine"]);
+    expect(connectionBetween("siberia", "sea-of-japan")).toBeUndefined();
+    expect(connectionBetween("siberia", "north-pacific")).toBeUndefined();
+    expect(connectionBetween("ukraine", "kazakhstan")).toBeUndefined();
+    expect(connectionBetween("kazakhstan", "middle-east")).toBeUndefined();
+  });
+
   it("opens controlled straits to exactly one faction", () => {
     let state = createInitialState();
     expect(canMoveUnit(state, "north-atlantic", "mediterranean", "united-kingdom", "navy")).toBe(true);
