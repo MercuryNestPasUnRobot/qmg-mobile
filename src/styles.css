@@ -478,7 +478,6 @@ summary:focus-visible {
   align-items: center;
 }
 
-.map-height-control,
 .map-width-control {
   display: flex;
   align-items: center;
@@ -489,7 +488,6 @@ summary:focus-visible {
   white-space: nowrap;
 }
 
-.map-height-control .icon-button,
 .map-width-control .icon-button {
   flex: 0 0 auto;
 }
@@ -2563,7 +2561,7 @@ textarea {
   .war-table {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: var(--map-panel-height, 106px) 48px 34px 62px 62px;
+    grid-template-rows: 106px 48px 34px 62px 62px;
     gap: 5px;
     height: auto;
     min-height: 100%;
@@ -2621,7 +2619,6 @@ textarea {
     gap: 3px;
   }
 
-  .map-height-control,
   .map-width-control {
     gap: 2px;
     font-size: 0.48rem;

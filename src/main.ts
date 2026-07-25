@@ -25,16 +25,12 @@ if (!appElement) throw new Error("App root not found");
 const app: HTMLDivElement = appElement;
 
 const store = new GameStore(window.localStorage);
-const MAP_HEIGHT_STORAGE_KEY = "qmg-mobile.map-height";
-const savedMapPanelHeight = Number(window.localStorage.getItem(MAP_HEIGHT_STORAGE_KEY));
+const MAP_ZOOM_LEVELS = [640, 760, 880, 1000, 1220, 1440] as const;
 let currentView: ViewId = "board";
 let selectedAreaId = "germany";
-let mapWidth = 980;
+let mapZoomIndex = 3;
+let mapWidth: number = MAP_ZOOM_LEVELS[mapZoomIndex]!;
 let mapScrollLeft = 190;
-let mapPanelHeight =
-  Number.isFinite(savedMapPanelHeight) && savedMapPanelHeight >= 70 && savedMapPanelHeight <= 260
-    ? savedMapPanelHeight
-    : 106;
 let handCountryId: CountryId = countriesForFaction(store.state.activeFaction)[0]!.id;
 let selectedCardId: string | null = null;
 let unitCountryId: CountryId = handCountryId;
@@ -318,16 +314,11 @@ function renderMap(): string {
           <span><i class="legend-swatch legend-swatch--strait"></i>海峡</span>
         </div>
         <div class="map-tools" aria-label="地图大小">
-          <div class="map-height-control" aria-label="地图高度">
-            <span>高度</span>
-            <button class="icon-button icon-button--small" data-action="map-height-step" data-delta="-15" aria-label="降低地图高度">−</button>
-            <button class="icon-button icon-button--small" data-action="map-height-step" data-delta="15" aria-label="增加地图高度">＋</button>
-          </div>
           <div class="map-width-control" aria-label="地图内容缩放">
             <span>缩放</span>
-            <button class="icon-button icon-button--small" data-action="map-zoom" data-width="760" aria-label="缩小地图">−</button>
-            <button class="icon-button icon-button--small" data-action="map-zoom" data-width="0" aria-label="地图适应宽度">适</button>
-            <button class="icon-button icon-button--small" data-action="map-zoom" data-width="1220" aria-label="放大地图">＋</button>
+            <button class="icon-button icon-button--small" data-action="map-zoom-step" data-delta="-1" aria-label="缩小地图">−</button>
+            <button class="icon-button icon-button--small" data-action="map-zoom-fit" aria-label="地图适应宽度">适</button>
+            <button class="icon-button icon-button--small" data-action="map-zoom-step" data-delta="1" aria-label="放大地图">＋</button>
           </div>
         </div>
       </div>
@@ -742,7 +733,7 @@ function renderSave(): string {
 
 function renderBoard(): string {
   return `
-    <div class="war-table" style="--map-panel-height:${mapPanelHeight}px">
+    <div class="war-table">
       ${renderMap()}
       ${renderAreaDetail()}
       ${renderCardZoneBar()}
@@ -836,21 +827,20 @@ app.addEventListener("click", (event) => {
     render();
     return;
   }
-  if (action === "map-height-step") {
-    mapPanelHeight = Math.min(260, Math.max(70, mapPanelHeight + Number(button.dataset.delta)));
-    app.querySelector<HTMLElement>(".war-table")?.style.setProperty("--map-panel-height", `${mapPanelHeight}px`);
-    try {
-      window.localStorage.setItem(MAP_HEIGHT_STORAGE_KEY, String(mapPanelHeight));
-    } catch {
-      // The control still works for this session if preference storage is unavailable.
-    }
-    return;
-  }
-  if (action === "map-zoom") {
+  if (action === "map-zoom-step") {
     const viewport = button.closest(".view-section")?.querySelector<HTMLElement>(".map-viewport");
     if (viewport) mapScrollLeft = viewport.scrollLeft;
-    mapWidth = Number(button.dataset.width);
-    if (mapWidth === 0) mapScrollLeft = 0;
+    mapZoomIndex = Math.min(
+      MAP_ZOOM_LEVELS.length - 1,
+      Math.max(0, mapZoomIndex + Number(button.dataset.delta)),
+    );
+    mapWidth = MAP_ZOOM_LEVELS[mapZoomIndex]!;
+    render();
+    return;
+  }
+  if (action === "map-zoom-fit") {
+    mapWidth = 0;
+    mapScrollLeft = 0;
     render();
     return;
   }
