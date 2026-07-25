@@ -25,10 +25,16 @@ if (!appElement) throw new Error("App root not found");
 const app: HTMLDivElement = appElement;
 
 const store = new GameStore(window.localStorage);
+const MAP_HEIGHT_STORAGE_KEY = "qmg-mobile.map-height";
+const savedMapPanelHeight = Number(window.localStorage.getItem(MAP_HEIGHT_STORAGE_KEY));
 let currentView: ViewId = "board";
 let selectedAreaId = "germany";
 let mapWidth = 980;
 let mapScrollLeft = 190;
+let mapPanelHeight =
+  Number.isFinite(savedMapPanelHeight) && savedMapPanelHeight >= 70 && savedMapPanelHeight <= 260
+    ? savedMapPanelHeight
+    : 106;
 let handCountryId: CountryId = countriesForFaction(store.state.activeFaction)[0]!.id;
 let selectedCardId: string | null = null;
 let unitCountryId: CountryId = handCountryId;
@@ -312,6 +318,11 @@ function renderMap(): string {
           <span><i class="legend-swatch legend-swatch--strait"></i>海峡</span>
         </div>
         <div class="map-tools" aria-label="地图缩放">
+          <label class="map-height-control" for="map-height">
+            <span>高度</span>
+            <input id="map-height" type="range" min="70" max="260" step="5" value="${mapPanelHeight}" aria-label="地图显示高度" />
+            <output id="map-height-value" for="map-height">${mapPanelHeight}</output>
+          </label>
           <button class="icon-button icon-button--small" data-action="map-zoom" data-width="760" aria-label="缩小地图">−</button>
           <button class="icon-button icon-button--small" data-action="map-zoom" data-width="0" aria-label="地图适应宽度">适</button>
           <button class="icon-button icon-button--small" data-action="map-zoom" data-width="1220" aria-label="放大地图">＋</button>
@@ -728,7 +739,7 @@ function renderSave(): string {
 
 function renderBoard(): string {
   return `
-    <div class="war-table">
+    <div class="war-table" style="--map-panel-height:${mapPanelHeight}px">
       ${renderMap()}
       ${renderAreaDetail()}
       ${renderCardZoneBar()}
@@ -1113,7 +1124,20 @@ app.addEventListener("change", (event) => {
 
 app.addEventListener("input", (event) => {
   const target = event.target;
-  if (!(target instanceof HTMLInputElement) || target.id !== "card-search") return;
+  if (!(target instanceof HTMLInputElement)) return;
+  if (target.id === "map-height") {
+    mapPanelHeight = Math.min(260, Math.max(70, Number(target.value)));
+    app.querySelector<HTMLElement>(".war-table")?.style.setProperty("--map-panel-height", `${mapPanelHeight}px`);
+    const output = app.querySelector<HTMLOutputElement>("#map-height-value");
+    if (output) output.textContent = String(mapPanelHeight);
+    try {
+      window.localStorage.setItem(MAP_HEIGHT_STORAGE_KEY, String(mapPanelHeight));
+    } catch {
+      // The control still works for this session if preference storage is unavailable.
+    }
+    return;
+  }
+  if (target.id !== "card-search") return;
   captureScrollPositions();
   cardSearch = target.value;
   const cursor = target.selectionStart ?? cardSearch.length;

@@ -475,6 +475,30 @@ summary:focus-visible {
   display: flex;
   flex: 0 0 auto;
   gap: 6px;
+  align-items: center;
+}
+
+.map-height-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(238, 243, 233, 0.7);
+  font-size: 0.56rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.map-height-control input {
+  width: 76px;
+  margin: 0;
+  accent-color: #d7c98e;
+}
+
+.map-height-control output {
+  min-width: 20px;
+  color: #f7f3e7;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .icon-button--small {
@@ -2535,10 +2559,10 @@ textarea {
   .war-table {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(100px, 1fr) 48px 34px 62px 62px;
+    grid-template-rows: var(--map-panel-height, 106px) 48px 34px 62px 62px;
     gap: 5px;
-    height: 100%;
-    min-height: 326px;
+    height: auto;
+    min-height: 100%;
   }
 
   .war-table > .battle-map-pane {
@@ -2591,6 +2615,19 @@ textarea {
 
   .map-commandbar .map-tools {
     gap: 3px;
+  }
+
+  .map-height-control {
+    gap: 2px;
+    font-size: 0.48rem;
+  }
+
+  .map-height-control input {
+    width: clamp(54px, 9vw, 76px);
+  }
+
+  .map-height-control output {
+    min-width: 18px;
   }
 
   .map-commandbar .icon-button {
