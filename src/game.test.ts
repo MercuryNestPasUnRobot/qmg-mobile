@@ -300,6 +300,8 @@ describe("save, restore, import and undo", () => {
       description: "由玩家手动执行",
       cardType: "other",
       destination: "hand",
+      packId: "test-pack",
+      packName: "测试拓展包",
     });
     const imported = parseImportedSave(store.exportJson());
     expect(imported.cardZones.germany.hand).toHaveLength(originalHandSize + 1);
@@ -317,22 +319,34 @@ describe("save, restore, import and undo", () => {
       description: "整体管理",
       cardType: "status",
       destination: "deck",
+      packId: "mixed-pack",
+      packName: "跨阵营拓展",
     });
-    const exported = source.exportExpansionPack("local-custom");
+    source.execute({
+      type: "ADD_CUSTOM_CARD",
+      countryId: "united-states",
+      name: "同盟测试牌",
+      description: "与轴心国牌同包",
+      cardType: "response",
+      destination: "hand",
+      packId: "mixed-pack",
+    });
+    expect(source.state.expansionPacks["mixed-pack"]?.cardIds).toHaveLength(2);
+    const exported = source.exportExpansionPack("mixed-pack");
     const parsed = parseExpansionPack(exported);
-    expect(parsed.name).toBe("本机自定义牌");
-    expect(parsed.cards).toHaveLength(1);
+    expect(parsed.name).toBe("跨阵营拓展");
+    expect(parsed.cards.map((card) => card.countryId)).toEqual(["germany", "united-states"]);
 
     const target = new GameStore();
     const packId = target.importExpansionPack(exported);
-    expect(target.state.expansionPacks[packId]?.cardIds).toHaveLength(1);
+    expect(target.state.expansionPacks[packId]?.cardIds).toHaveLength(2);
     expect(Object.values(target.state.cards).some((card) => card.name === "拓展测试牌")).toBe(true);
 
     target.newGame();
-    expect(target.state.expansionPacks[packId]?.cardIds).toHaveLength(1);
+    expect(target.state.expansionPacks[packId]?.cardIds).toHaveLength(2);
     target.execute({ type: "REMOVE_EXPANSION_PACK", packId });
     expect(target.state.expansionPacks[packId]).toBeUndefined();
-    expect(Object.values(target.state.cards).some((card) => card.name === "拓展测试牌")).toBe(false);
+    expect(Object.values(target.state.cards).filter((card) => card.isCustom)).toHaveLength(0);
   });
 
   it("rejects malformed expansion packs", () => {

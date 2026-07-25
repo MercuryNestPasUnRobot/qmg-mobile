@@ -2533,8 +2533,19 @@ textarea {
   overflow-y: auto;
 }
 
-.custom-card-form label:nth-of-type(2) {
+.custom-card-form__description,
+.custom-card-form__pack-note {
   grid-column: 1 / -1;
+}
+
+.custom-card-form__pack-note {
+  margin: -2px 0 0;
+  color: rgba(238, 243, 233, 0.58);
+  font-size: 0.62rem;
+}
+
+.custom-card-form [hidden] {
+  display: none;
 }
 
 .custom-card-form .button {
@@ -3121,7 +3132,7 @@ textarea {
     padding: 8px;
   }
 
-  .custom-card-form label:nth-of-type(2) {
+  .custom-card-form__description {
     grid-column: span 2;
   }
 

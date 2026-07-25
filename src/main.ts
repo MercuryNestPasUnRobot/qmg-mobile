@@ -572,6 +572,8 @@ function renderCardManager(): string {
   const country = countryById(handCountryId);
   const zones = store.state.cardZones[handCountryId];
   if (cardPanelMode === "custom") {
+    const packs = Object.values(store.state.expansionPacks);
+    const createNewPack = packs.length === 0;
     return `
       <div class="card-manager-overlay" role="dialog" aria-modal="true" aria-label="添加自定义卡牌">
         <section class="card-manager card-manager--custom">
@@ -579,9 +581,21 @@ function renderCardManager(): string {
           <form id="add-card-form" class="custom-card-form">
             <input type="hidden" name="countryId" value="${country.id}" />
             <label><span>名称</span><input name="name" maxlength="60" required placeholder="例如：临时增援" autocomplete="off" /></label>
-            <label><span>技能描述</span><textarea name="description" maxlength="300" rows="3" placeholder="写下由玩家手动执行的效果"></textarea></label>
+            <label class="custom-card-form__description"><span>技能描述</span><textarea name="description" maxlength="300" rows="3" placeholder="写下由玩家手动执行的效果"></textarea></label>
             <label><span>类型</span><select name="cardType">${Object.entries(CARD_TYPE_NAMES).map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}</select></label>
             <label><span>加入</span><select name="destination"><option value="hand">当前手牌</option><option value="deck">牌堆顶部</option></select></label>
+            <label class="custom-card-form__pack">
+              <span>所属拓展包</span>
+              <select id="custom-card-pack" name="packChoice">
+                ${packs.map((pack) => `<option value="${escapeHtml(pack.id)}">${escapeHtml(pack.name)} · ${pack.cardIds.length} 张</option>`).join("")}
+                <option value="__new__" ${createNewPack ? "selected" : ""}>＋ 创建新拓展包</option>
+              </select>
+            </label>
+            <label id="new-pack-name-field" class="custom-card-form__new-pack" ${createNewPack ? "" : "hidden"}>
+              <span>新拓展包名称</span>
+              <input name="newPackName" maxlength="60" placeholder="例如：地中海战场" autocomplete="off" ${createNewPack ? "required" : ""} />
+            </label>
+            <p class="custom-card-form__pack-note">同一拓展包可以同时收录轴心国与同盟国的卡牌。</p>
             <button class="button button--primary" type="submit">添加卡牌</button>
           </form>
         </section>
@@ -1175,6 +1189,17 @@ app.addEventListener(
 app.addEventListener("change", (event) => {
   const target = event.target as HTMLInputElement | HTMLSelectElement;
   captureScrollPositions();
+  if (target.id === "custom-card-pack" && target instanceof HTMLSelectElement) {
+    const field = document.querySelector<HTMLElement>("#new-pack-name-field");
+    const input = field?.querySelector<HTMLInputElement>('input[name="newPackName"]');
+    const creating = target.value === "__new__";
+    if (field) field.hidden = !creating;
+    if (input) {
+      input.required = creating;
+      if (creating) input.focus();
+    }
+    return;
+  }
   if (target.id === "turn-country") {
     const countryId = target.value as CountryId;
     const faction = countryById(countryId).faction;
@@ -1239,6 +1264,8 @@ app.addEventListener("submit", (event) => {
 
   try {
     if (form.id === "add-card-form") {
+      const packChoice = String(data.get("packChoice"));
+      const creatingPack = packChoice === "__new__";
       store.execute({
         type: "ADD_CUSTOM_CARD",
         countryId: String(data.get("countryId")) as CountryId,
@@ -1246,6 +1273,8 @@ app.addEventListener("submit", (event) => {
         description: String(data.get("description")),
         cardType: String(data.get("cardType")) as CardType,
         destination: String(data.get("destination")) as "hand" | "deck",
+        packId: creatingPack ? `pack-${Date.now()}-${store.state.nextCustomCardId}` : packChoice,
+        packName: creatingPack ? String(data.get("newPackName")) : undefined,
       });
       cardPanelMode = null;
       showToast("新卡牌已添加");

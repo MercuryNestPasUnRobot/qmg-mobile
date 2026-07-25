@@ -125,6 +125,8 @@ export type GameAction =
       description: string;
       cardType: CardType;
       destination: "hand" | "deck";
+      packId: string;
+      packName?: string;
     }
   | {
       type: "IMPORT_EXPANSION_PACK";
@@ -273,7 +275,7 @@ export function describeAction(action: GameAction, state: GameState): string {
     case "RETURN_SLOT_CARD":
       return `${countryById(action.countryId).name}将「${state.cards[action.cardId]?.name ?? "未知卡牌"}」收回手牌`;
     case "ADD_CUSTOM_CARD":
-      return `${countryById(action.countryId).name}添加1张自定义卡牌到${action.destination === "hand" ? "手牌" : "牌堆"}`;
+      return `${countryById(action.countryId).name}向「${state.expansionPacks[action.packId]?.name ?? action.packName ?? "拓展包"}」添加1张卡牌`;
     case "IMPORT_EXPANSION_PACK":
       return `加入拓展包「${action.name}」（${action.cards.length}张牌）`;
     case "REMOVE_EXPANSION_PACK":
@@ -436,6 +438,19 @@ export function reduceGame(state: GameState, action: GameAction, now = new Date(
     case "ADD_CUSTOM_CARD": {
       const name = action.name.trim();
       if (!name) throw new Error("请输入卡牌名称");
+      const packId = action.packId.trim();
+      if (!packId) throw new Error("请选择拓展包");
+      let pack = next.expansionPacks[packId];
+      if (!pack) {
+        const packName = action.packName?.trim();
+        if (!packName) throw new Error("请输入新拓展包名称");
+        pack = next.expansionPacks[packId] = {
+          id: packId,
+          name: packName,
+          cardIds: [],
+          createdAt: now.toISOString(),
+        };
+      }
       const zones = next.cardZones[action.countryId];
       const id = `custom-${next.nextCustomCardId}`;
       next.nextCustomCardId += 1;
@@ -447,19 +462,11 @@ export function reduceGame(state: GameState, action: GameAction, now = new Date(
         type: action.cardType,
         edition: "custom",
         isCustom: true,
-        expansionPackId: "local-custom",
+        expansionPackId: packId,
         expansionDestination: action.destination,
       };
       zones[action.destination].push(id);
-      const localPack =
-        next.expansionPacks["local-custom"] ??
-        (next.expansionPacks["local-custom"] = {
-          id: "local-custom",
-          name: "本机自定义牌",
-          cardIds: [],
-          createdAt: now.toISOString(),
-        });
-      localPack.cardIds.push(id);
+      pack.cardIds.push(id);
       break;
     }
     case "IMPORT_EXPANSION_PACK": {
