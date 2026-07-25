@@ -730,9 +730,9 @@ function renderBoard(): string {
   return `
     <div class="war-table">
       ${renderMap()}
-      ${renderCommandRail()}
       ${renderAreaDetail()}
       ${renderCardZoneBar()}
+      ${renderCommandRail()}
       ${renderHandDock()}
     </div>
     ${renderCardManager()}
