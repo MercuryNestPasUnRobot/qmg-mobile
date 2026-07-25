@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { canMoveUnit, createInitialState, normalizeGameState, reduceGame } from "./game";
 import { CARD_CATALOG } from "./generated-card-catalog";
-import { AREAS, MAP_CONNECTIONS, areaById, connectionBetween, countriesForFaction } from "./prototype-data";
+import { AREAS, COUNTRIES, MAP_CONNECTIONS, areaById, connectionBetween, countriesForFaction } from "./prototype-data";
 import { GameStore, parseExpansionPack, parseImportedSave, type StorageLike } from "./store";
 
 class MemoryStorage implements StorageLike {
@@ -12,6 +12,14 @@ class MemoryStorage implements StorageLike {
   setItem(key: string, value: string): void {
     this.values.set(key, value);
   }
+}
+
+function seededRandom(seed: number): () => number {
+  let value = seed >>> 0;
+  return () => {
+    value = (Math.imul(value, 1_664_525) + 1_013_904_223) >>> 0;
+    return value;
+  };
 }
 
 describe("prototype game state", () => {
@@ -192,12 +200,34 @@ describe("prototype game state", () => {
     state = reduceGame(state, { type: "DRAW_CARD", countryId: "germany" });
     expect(state.cardZones.germany.deck).toHaveLength(originalDeckSize - 1);
     expect(state.cardZones.germany.hand).toHaveLength(originalHandSize + 1);
-    expect(state.cardZones.japan.hand).toHaveLength(7);
+    expect(state.cardZones.japan.hand).toHaveLength(0);
 
     const cardId = state.cardZones.germany.hand.at(-1)!;
     state = reduceGame(state, { type: "DISCARD_CARD", countryId: "germany", cardId });
     expect(state.cardZones.germany.hand).toHaveLength(originalHandSize);
     expect(state.cardZones.germany.discard).toEqual([cardId]);
+  });
+
+  it("starts every country with an empty hand and reshuffles complete decks for each game", () => {
+    const first = createInitialState(new Date("2026-01-01T00:00:00Z"), seededRandom(1));
+    const second = createInitialState(new Date("2026-01-01T00:00:00Z"), seededRandom(2));
+
+    expect(
+      Object.values(first.cardZones).every(
+        (zones) =>
+          zones.hand.length === 0 &&
+          zones.discard.length === 0 &&
+          zones.status.length === 0 &&
+          zones.response.length === 0,
+      ),
+    ).toBe(true);
+    for (const country of COUNTRIES) {
+      expect(first.cardZones[country.id].deck).toHaveLength(
+        Object.values(first.cards).filter((card) => card.countryId === country.id).length,
+      );
+    }
+    expect(first.cardZones.germany.deck).not.toEqual(second.cardZones.germany.deck);
+    expect(first.log[0]?.message).toContain("洗牌");
   });
 
   it("includes the complete six-country card catalog with images and independent descriptions", () => {
@@ -222,7 +252,7 @@ describe("prototype game state", () => {
       "united-states": 72,
     });
     expect(Object.values(state.cards).every((card) => card.name && card.description && card.image)).toBe(true);
-    expect(Object.values(state.cardZones).every((zones) => zones.hand.length === 7)).toBe(true);
+    expect(Object.values(state.cardZones).every((zones) => zones.hand.length === 0)).toBe(true);
   });
 
   it("classifies every persistent British card as status and repairs existing saves", () => {
@@ -439,6 +469,12 @@ describe("save, restore, import and undo", () => {
 
     target.newGame();
     expect(target.state.expansionPacks[packId]?.cardIds).toHaveLength(2);
+    expect(Object.values(target.state.cardZones).every((zones) => zones.hand.length === 0)).toBe(true);
+    expect(
+      Object.values(target.state.cards)
+        .filter((card) => card.isCustom)
+        .every((card) => target.state.cardZones[card.countryId].deck.includes(card.id)),
+    ).toBe(true);
     target.execute({ type: "REMOVE_EXPANSION_PACK", packId });
     expect(target.state.expansionPacks[packId]).toBeUndefined();
     expect(Object.values(target.state.cards).filter((card) => card.isCustom)).toHaveLength(0);

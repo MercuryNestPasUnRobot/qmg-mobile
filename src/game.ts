@@ -29,6 +29,7 @@ export type CardType =
   | "bolster"
   | "other";
 export type AuxiliaryNation = "china" | "france";
+export type RandomUint32 = () => number;
 
 export interface UnitStack {
   countryId: CountryId;
@@ -148,7 +149,7 @@ function emptyZones(): Record<CountryId, CardZones> {
   return zones;
 }
 
-export function createInitialState(now = new Date()): GameState {
+export function createInitialState(now = new Date(), randomUint32?: RandomUint32): GameState {
   const cards: Record<string, Card> = {};
   const cardZones = emptyZones();
 
@@ -164,30 +165,70 @@ export function createInitialState(now = new Date()): GameState {
       };
       cardZones[country.id].deck.push(definition.id);
     }
-    cardZones[country.id].hand.push(...cardZones[country.id].deck.splice(-7));
   }
 
   const timestamp = now.toISOString();
-  return {
-    version: SAVE_VERSION,
-    activeFaction: "axis",
-    turnCountry: "germany",
-    turnNumber: 1,
-    phase: "开始",
-    areas: Object.fromEntries(AREAS.map((area) => [area.id, { id: area.id, units: [] }])),
-    cards,
-    cardZones,
-    expansionPacks: {},
-    victoryPoints: { axis: 0, allies: 0 },
-    log: [{ id: 1, at: timestamp, message: "新战局已创建" }],
-    nextLogId: 2,
-    nextCustomCardId: 1,
-    updatedAt: timestamp,
-  };
+  return shuffleAllCardsIntoDecks(
+    {
+      version: SAVE_VERSION,
+      activeFaction: "axis",
+      turnCountry: "germany",
+      turnNumber: 1,
+      phase: "开始",
+      areas: Object.fromEntries(AREAS.map((area) => [area.id, { id: area.id, units: [] }])),
+      cards,
+      cardZones,
+      expansionPacks: {},
+      victoryPoints: { axis: 0, allies: 0 },
+      log: [{ id: 1, at: timestamp, message: "新战局已创建并洗牌" }],
+      nextLogId: 2,
+      nextCustomCardId: 1,
+      updatedAt: timestamp,
+    },
+    randomUint32,
+  );
 }
 
 function cloneState(state: GameState): GameState {
   return structuredClone(state);
+}
+
+function secureRandomUint32(): number {
+  const values = new Uint32Array(1);
+  globalThis.crypto.getRandomValues(values);
+  return values[0]!;
+}
+
+function shuffleInPlace<T>(values: T[], randomUint32: RandomUint32): void {
+  const uint32Range = 0x1_0000_0000;
+  for (let index = values.length - 1; index > 0; index -= 1) {
+    const choices = index + 1;
+    const unbiasedLimit = Math.floor(uint32Range / choices) * choices;
+    let sample: number;
+    do {
+      sample = randomUint32() >>> 0;
+    } while (sample >= unbiasedLimit);
+    const swapIndex = sample % choices;
+    [values[index], values[swapIndex]] = [values[swapIndex]!, values[index]!];
+  }
+}
+
+export function shuffleAllCardsIntoDecks(
+  state: GameState,
+  randomUint32: RandomUint32 = secureRandomUint32,
+): GameState {
+  const next = cloneState(state);
+  for (const country of COUNTRIES) {
+    const zones = next.cardZones[country.id];
+    const allCards = [...zones.deck, ...zones.hand, ...zones.discard, ...zones.status, ...zones.response];
+    shuffleInPlace(allCards, randomUint32);
+    zones.deck = allCards;
+    zones.hand = [];
+    zones.discard = [];
+    zones.status = [];
+    zones.response = [];
+  }
+  return next;
 }
 
 function addLog(state: GameState, message: string, now = new Date()): void {

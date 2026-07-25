@@ -6,10 +6,12 @@ import {
   normalizeGameState,
   reduceGame,
   SAVE_VERSION,
+  shuffleAllCardsIntoDecks,
   type CardType,
   type ExpansionCardDefinition,
   type GameAction,
   type GameState,
+  type RandomUint32,
 } from "./game";
 import { COUNTRIES, type CountryId } from "./prototype-data";
 
@@ -190,13 +192,13 @@ export class GameStore {
     return this.history.length > 0;
   }
 
-  newGame(now = new Date()): void {
+  newGame(now = new Date(), randomUint32?: RandomUint32): void {
     const packs = Object.values(this.state.expansionPacks).map((pack) => ({
       id: pack.id,
       name: pack.name,
       cards: this.expansionCards(pack.id),
     }));
-    this.state = createInitialState(now);
+    this.state = createInitialState(now, randomUint32);
     this.history = [];
     for (const pack of packs) {
       this.state = reduceGame(
@@ -205,6 +207,7 @@ export class GameStore {
         now,
       );
     }
+    this.state = shuffleAllCardsIntoDecks(this.state, randomUint32);
     this.persist();
   }
 
