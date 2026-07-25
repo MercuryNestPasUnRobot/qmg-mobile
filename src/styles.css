@@ -1599,6 +1599,92 @@ textarea {
   padding: 4px 8px;
 }
 
+.bot-strength-manager {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+}
+
+.bot-strength-manager > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bot-strength-manager > header div {
+  display: grid;
+}
+
+.bot-strength-manager > header span {
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.bot-strength-manager h3,
+.bot-strength-manager p {
+  margin: 0;
+}
+
+.bot-strength-manager > header p {
+  max-width: 14rem;
+  color: var(--muted);
+  font-size: 0.65rem;
+  text-align: right;
+}
+
+.bot-strength-row {
+  display: grid;
+  grid-template-columns: minmax(76px, 1fr) repeat(2, minmax(112px, 1fr));
+  gap: 8px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+}
+
+.bot-strength-row > strong {
+  font-size: 0.78rem;
+}
+
+.strength-stepper {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.strength-stepper > span {
+  color: var(--muted);
+  font-size: 0.66rem;
+  white-space: nowrap;
+}
+
+.strength-stepper > div {
+  display: grid;
+  grid-template-columns: 28px 28px 28px;
+  align-items: center;
+}
+
+.strength-stepper button {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.strength-stepper b {
+  text-align: center;
+  font-size: 0.76rem;
+}
+
 .danger-link {
   color: var(--danger);
 }
@@ -1645,8 +1731,10 @@ textarea {
   font-weight: 900;
 }
 
-.start-settings-placeholder {
+.start-settings {
+  display: grid;
   min-height: 76px;
+  gap: 7px;
   padding: 12px;
   border: 1px dashed rgba(255, 255, 255, 0.2);
   border-radius: 10px;
@@ -1654,9 +1742,179 @@ textarea {
   background: rgba(255, 255, 255, 0.04);
 }
 
-.start-settings-placeholder p {
+.start-settings p {
   margin: 5px 0 0;
   font-size: 0.72rem;
+}
+
+.start-strength-settings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(2, minmax(112px, 1fr));
+  gap: 7px;
+  align-items: center;
+  padding-top: 3px;
+}
+
+.start-strength-settings > span {
+  color: #eef3e9;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.start-strength-settings .strength-stepper > span {
+  color: rgba(238, 243, 233, 0.7);
+}
+
+.start-strength-settings .strength-stepper button {
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #eef3e9;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.controller-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.controller-grid button,
+.total-war-toggle {
+  min-height: 34px;
+  padding: 5px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  color: #eef3e9;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.controller-grid button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.controller-grid button b {
+  color: #b8c1b8;
+  font-size: 0.55rem;
+}
+
+.controller-grid button.is-bot,
+.total-war-toggle.is-active {
+  border-color: #d7c98e;
+  color: #172019;
+  background: #d7c98e;
+}
+
+.controller-grid button.is-bot b {
+  color: #713328;
+}
+
+@media (max-width: 520px) {
+  .bot-strength-manager > header {
+    align-items: start;
+  }
+
+  .bot-strength-row {
+    grid-template-columns: 1fr;
+  }
+
+  .start-strength-settings {
+    grid-template-columns: 1fr;
+  }
+
+  .start-strength-settings .strength-stepper {
+    width: 100%;
+  }
+}
+
+.bot-turn-panel {
+  position: fixed;
+  z-index: 60;
+  right: max(10px, env(safe-area-inset-right));
+  bottom: max(10px, env(safe-area-inset-bottom));
+  display: grid;
+  width: min(520px, calc(100vw - 20px));
+  max-height: min(72dvh, 520px);
+  gap: 9px;
+  padding: 12px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  border-radius: 14px;
+  color: #eef3e9;
+  background: rgba(17, 31, 24, 0.97);
+  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.48);
+}
+
+.bot-turn-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.bot-turn-panel > header div {
+  display: grid;
+}
+
+.bot-turn-panel > header span {
+  color: #d7c98e;
+  font-size: 0.58rem;
+}
+
+.bot-turn-panel > header button,
+.bot-answer-row button,
+.bot-panel-reopen {
+  min-height: 34px;
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: #eef3e9;
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 900;
+}
+
+.bot-turn-panel p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.bot-card-summary {
+  display: grid;
+  gap: 4px;
+  padding: 9px;
+  border-left: 3px solid #d7c98e;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.bot-card-summary span,
+.bot-turn-panel li {
+  color: rgba(238, 243, 233, 0.68);
+  font-size: 0.66rem;
+}
+
+.bot-answer-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bot-answer-row button:first-child {
+  color: #172019;
+  background: #d7c98e;
+}
+
+.bot-turn-panel details ol {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.bot-panel-reopen {
+  position: fixed;
+  z-index: 59;
+  right: 10px;
+  bottom: 10px;
+  color: #172019;
+  background: #d7c98e;
 }
 
 .info-box {
@@ -3210,10 +3468,12 @@ textarea {
     font-size: 1.5rem;
   }
 
-  .start-settings-placeholder {
+  .start-settings {
     grid-column: 3;
     grid-row: 1 / 3;
     min-height: 62px;
+    max-height: 126px;
+    overflow-y: auto;
   }
 
   .game-start-card > .button {

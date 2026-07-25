@@ -10,8 +10,20 @@ import {
   type UnitKind,
 } from "./prototype-data";
 import { CARD_CATALOG } from "./generated-card-catalog";
+import type {
+  BotRuntimeState,
+  BotStrengthSettings,
+  ControllerType,
+  TotalWarDiscardMode,
+} from "./bot/types";
 
 export const SAVE_VERSION = 1;
+export const DEFAULT_BOT_INSPECTION_WINDOW = 8;
+export const DEFAULT_BOT_DISCARD_RECYCLE = 0;
+export const MIN_BOT_INSPECTION_WINDOW = 1;
+export const MAX_BOT_INSPECTION_WINDOW = 20;
+export const MIN_BOT_DISCARD_RECYCLE = 0;
+export const MAX_BOT_DISCARD_RECYCLE = 20;
 export const PHASES = ["开始", "出牌", "空军（Total War）", "补给", "计分", "弃牌", "抽牌"] as const;
 const LEGACY_PHASES = ["部署", "行动", "战斗"] as const;
 export type Phase = (typeof PHASES)[number] | (typeof LEGACY_PHASES)[number];
@@ -78,6 +90,9 @@ export interface CardZones {
   discard: string[];
   status: string[];
   response: string[];
+  inspection: string[];
+  resolution: string[];
+  removed: string[];
 }
 
 export interface LogEntry {
@@ -96,6 +111,7 @@ export interface GameState {
   cards: Record<string, Card>;
   cardZones: Record<CountryId, CardZones>;
   expansionPacks: Record<string, ExpansionPack>;
+  bot: BotRuntimeState;
   victoryPoints: Record<Faction, number>;
   log: LogEntry[];
   nextLogId: number;
@@ -108,6 +124,20 @@ export type GameAction =
   | { type: "SET_TURN_COUNTRY"; countryId: CountryId }
   | { type: "SET_PHASE"; phase: Phase }
   | { type: "END_TURN" }
+  | { type: "SET_CONTROLLER"; countryId: CountryId; controller: ControllerType }
+  | { type: "SET_BOT_CONFIG"; totalWarEnabled: boolean; discardMode: TotalWarDiscardMode }
+  | {
+      type: "SET_BOT_STRENGTH";
+      countryId: CountryId;
+      inspectionWindowSize: number;
+      discardRecycleCount: number;
+    }
+  | {
+      type: "SET_ALL_BOT_STRENGTH";
+      inspectionWindowSize: number;
+      discardRecycleCount: number;
+    }
+  | { type: "CLEAR_BOT_SESSION" }
   | { type: "PLACE_UNIT"; areaId: string; countryId: CountryId; kind: UnitKind; auxiliary?: AuxiliaryNation }
   | { type: "REMOVE_UNIT"; areaId: string; countryId: CountryId; kind: UnitKind; auxiliary?: AuxiliaryNation }
   | { type: "DRAW_CARD"; countryId: CountryId }
@@ -144,9 +174,65 @@ export type GameAction =
 function emptyZones(): Record<CountryId, CardZones> {
   const zones = {} as Record<CountryId, CardZones>;
   for (const country of COUNTRIES) {
-    zones[country.id] = { deck: [], hand: [], discard: [], status: [], response: [] };
+    zones[country.id] = {
+      deck: [],
+      hand: [],
+      discard: [],
+      status: [],
+      response: [],
+      inspection: [],
+      resolution: [],
+      removed: [],
+    };
   }
   return zones;
+}
+
+function defaultBotStrength(): BotStrengthSettings {
+  return {
+    inspectionWindowSize: DEFAULT_BOT_INSPECTION_WINDOW,
+    discardRecycleCount: DEFAULT_BOT_DISCARD_RECYCLE,
+  };
+}
+
+function allCountryBotStrength(): Record<CountryId, BotStrengthSettings> {
+  return Object.fromEntries(COUNTRIES.map((country) => [country.id, defaultBotStrength()])) as Record<
+    CountryId,
+    BotStrengthSettings
+  >;
+}
+
+function requireBotStrength(inspectionWindowSize: number, discardRecycleCount: number): void {
+  if (
+    !Number.isInteger(inspectionWindowSize) ||
+    inspectionWindowSize < MIN_BOT_INSPECTION_WINDOW ||
+    inspectionWindowSize > MAX_BOT_INSPECTION_WINDOW
+  ) {
+    throw new Error(`检查窗口必须为 ${MIN_BOT_INSPECTION_WINDOW}–${MAX_BOT_INSPECTION_WINDOW}`);
+  }
+  if (
+    !Number.isInteger(discardRecycleCount) ||
+    discardRecycleCount < MIN_BOT_DISCARD_RECYCLE ||
+    discardRecycleCount > MAX_BOT_DISCARD_RECYCLE
+  ) {
+    throw new Error(`弃牌洗回数量必须为 ${MIN_BOT_DISCARD_RECYCLE}–${MAX_BOT_DISCARD_RECYCLE}`);
+  }
+}
+
+function normalizedBotStrength(value?: Partial<BotStrengthSettings>): BotStrengthSettings {
+  const inspectionWindowSize = Number.isInteger(value?.inspectionWindowSize)
+    ? Math.min(
+        MAX_BOT_INSPECTION_WINDOW,
+        Math.max(MIN_BOT_INSPECTION_WINDOW, value!.inspectionWindowSize!),
+      )
+    : DEFAULT_BOT_INSPECTION_WINDOW;
+  const discardRecycleCount = Number.isInteger(value?.discardRecycleCount)
+    ? Math.min(
+        MAX_BOT_DISCARD_RECYCLE,
+        Math.max(MIN_BOT_DISCARD_RECYCLE, value!.discardRecycleCount!),
+      )
+    : DEFAULT_BOT_DISCARD_RECYCLE;
+  return { inspectionWindowSize, discardRecycleCount };
 }
 
 export function createInitialState(now = new Date(), randomUint32?: RandomUint32): GameState {
@@ -179,6 +265,16 @@ export function createInitialState(now = new Date(), randomUint32?: RandomUint32
       cards,
       cardZones,
       expansionPacks: {},
+      bot: {
+        controllers: Object.fromEntries(COUNTRIES.map((country) => [country.id, "HUMAN"])) as Record<
+          CountryId,
+          ControllerType
+        >,
+        countrySettings: allCountryBotStrength(),
+        config: { totalWarEnabled: false, totalWarDiscardMode: "TOP_CARD" },
+        rngState: randomUint32?.() ?? secureRandomUint32(),
+        session: null,
+      },
       victoryPoints: { axis: 0, allies: 0 },
       log: [{ id: 1, at: timestamp, message: "新战局已创建并洗牌" }],
       nextLogId: 2,
@@ -220,13 +316,25 @@ export function shuffleAllCardsIntoDecks(
   const next = cloneState(state);
   for (const country of COUNTRIES) {
     const zones = next.cardZones[country.id];
-    const allCards = [...zones.deck, ...zones.hand, ...zones.discard, ...zones.status, ...zones.response];
+    const allCards = [
+      ...zones.deck,
+      ...zones.hand,
+      ...zones.discard,
+      ...zones.status,
+      ...zones.response,
+      ...zones.inspection,
+      ...zones.resolution,
+      ...zones.removed,
+    ];
     shuffleInPlace(allCards, randomUint32);
     zones.deck = allCards;
     zones.hand = [];
     zones.discard = [];
     zones.status = [];
     zones.response = [];
+    zones.inspection = [];
+    zones.resolution = [];
+    zones.removed = [];
   }
   return next;
 }
@@ -311,6 +419,16 @@ export function describeAction(action: GameAction, state: GameState): string {
       const index = TURN_ORDER.indexOf(state.turnCountry);
       return `结束${countryById(state.turnCountry).name}回合，交给${countryById(TURN_ORDER[(index + 1) % TURN_ORDER.length]!).name}`;
     }
+    case "SET_CONTROLLER":
+      return `${countryById(action.countryId).name}控制方式设为${action.controller}`;
+    case "SET_BOT_CONFIG":
+      return `Bot Total War ${action.totalWarEnabled ? "开启" : "关闭"}`;
+    case "SET_BOT_STRENGTH":
+      return `${countryById(action.countryId).name} Bot 强度：检查 ${action.inspectionWindowSize}，洗回 ${action.discardRecycleCount}`;
+    case "SET_ALL_BOT_STRENGTH":
+      return `统一 Bot 强度：检查 ${action.inspectionWindowSize}，洗回 ${action.discardRecycleCount}`;
+    case "CLEAR_BOT_SESSION":
+      return "清除已完成的 Bot 回合";
     case "PLACE_UNIT":
       return `${auxiliaryName(action.auxiliary) || countryById(action.countryId).name}在${areaById(action.areaId).name}放置1支${
         action.kind === "army" ? "陆军" : action.kind === "navy" ? "海军" : "空军"
@@ -380,6 +498,34 @@ export function reduceGame(state: GameState, action: GameAction, now = new Date(
       if (nextIndex === 0) next.turnNumber += 1;
       break;
     }
+    case "SET_CONTROLLER":
+      next.bot.controllers[action.countryId] = action.controller;
+      break;
+    case "SET_BOT_CONFIG":
+      next.bot.config = {
+        totalWarEnabled: action.totalWarEnabled,
+        totalWarDiscardMode: action.discardMode,
+      };
+      break;
+    case "SET_BOT_STRENGTH":
+      requireBotStrength(action.inspectionWindowSize, action.discardRecycleCount);
+      next.bot.countrySettings[action.countryId] = {
+        inspectionWindowSize: action.inspectionWindowSize,
+        discardRecycleCount: action.discardRecycleCount,
+      };
+      break;
+    case "SET_ALL_BOT_STRENGTH":
+      requireBotStrength(action.inspectionWindowSize, action.discardRecycleCount);
+      for (const country of COUNTRIES) {
+        next.bot.countrySettings[country.id] = {
+          inspectionWindowSize: action.inspectionWindowSize,
+          discardRecycleCount: action.discardRecycleCount,
+        };
+      }
+      break;
+    case "CLEAR_BOT_SESSION":
+      next.bot.session = null;
+      break;
     case "PLACE_UNIT": {
       requireCompatibleArea(action.areaId, action.kind);
       countryById(action.countryId);
@@ -583,6 +729,9 @@ export function reduceGame(state: GameState, action: GameAction, now = new Date(
         zones.discard = zones.discard.filter((id) => !removing.has(id));
         zones.status = zones.status.filter((id) => !removing.has(id));
         zones.response = zones.response.filter((id) => !removing.has(id));
+        zones.inspection = zones.inspection.filter((id) => !removing.has(id));
+        zones.resolution = zones.resolution.filter((id) => !removing.has(id));
+        zones.removed = zones.removed.filter((id) => !removing.has(id));
       }
       for (const id of removing) delete next.cards[id];
       delete next.expansionPacks[action.packId];
@@ -634,11 +783,17 @@ function normalizeCards(state: GameState): void {
     const zones = state.cardZones[country.id];
     zones.status = Array.isArray(zones.status) ? zones.status : [];
     zones.response = Array.isArray(zones.response) ? zones.response : [];
+    zones.inspection = Array.isArray(zones.inspection) ? zones.inspection : [];
+    zones.resolution = Array.isArray(zones.resolution) ? zones.resolution : [];
+    zones.removed = Array.isArray(zones.removed) ? zones.removed : [];
     zones.deck = zones.deck.filter((id) => !id.includes("-prototype-"));
     zones.hand = zones.hand.filter((id) => !id.includes("-prototype-"));
     zones.discard = zones.discard.filter((id) => !id.includes("-prototype-"));
     zones.status = zones.status.filter((id) => !id.includes("-prototype-"));
     zones.response = zones.response.filter((id) => !id.includes("-prototype-"));
+    zones.inspection = zones.inspection.filter((id) => !id.includes("-prototype-"));
+    zones.resolution = zones.resolution.filter((id) => !id.includes("-prototype-"));
+    zones.removed = zones.removed.filter((id) => !id.includes("-prototype-"));
   }
   for (const id of Object.keys(state.cards)) {
     if (id.includes("-prototype-")) delete state.cards[id];
@@ -647,7 +802,16 @@ function normalizeCards(state: GameState): void {
   const placed = new Set(
     COUNTRIES.flatMap((country) => {
       const zones = state.cardZones[country.id];
-      return [...zones.deck, ...zones.hand, ...zones.discard, ...zones.status, ...zones.response];
+      return [
+        ...zones.deck,
+        ...zones.hand,
+        ...zones.discard,
+        ...zones.status,
+        ...zones.response,
+        ...zones.inspection,
+        ...zones.resolution,
+        ...zones.removed,
+      ];
     }),
   );
 
@@ -710,6 +874,36 @@ function normalizeCards(state: GameState): void {
 
 export function normalizeGameState(state: GameState): GameState {
   const normalized = cloneState(state);
+  normalized.bot = normalized.bot ?? {
+    controllers: Object.fromEntries(COUNTRIES.map((country) => [country.id, "HUMAN"])) as Record<
+      CountryId,
+      ControllerType
+    >,
+    config: { totalWarEnabled: false, totalWarDiscardMode: "TOP_CARD" },
+    countrySettings: allCountryBotStrength(),
+    rngState: 0x6d2b79f5,
+    session: null,
+  };
+  normalized.bot.controllers = Object.fromEntries(
+    COUNTRIES.map((country) => [
+      country.id,
+      normalized.bot.controllers?.[country.id] === "BOT" ? "BOT" : "HUMAN",
+    ]),
+  ) as Record<CountryId, ControllerType>;
+  normalized.bot.countrySettings = Object.fromEntries(
+    COUNTRIES.map((country) => [
+      country.id,
+      normalizedBotStrength(normalized.bot.countrySettings?.[country.id]),
+    ]),
+  ) as Record<CountryId, BotStrengthSettings>;
+  normalized.bot.config = {
+    totalWarEnabled: Boolean(normalized.bot.config?.totalWarEnabled),
+    totalWarDiscardMode:
+      normalized.bot.config?.totalWarDiscardMode === "RANDOM_FROM_DECK" ? "RANDOM_FROM_DECK" : "TOP_CARD",
+  };
+  normalized.bot.rngState = Number.isInteger(normalized.bot.rngState)
+    ? normalized.bot.rngState >>> 0
+    : 0x6d2b79f5;
   for (const area of AREAS) {
     if (!normalized.areas[area.id]) normalized.areas[area.id] = { id: area.id, units: [] };
     for (const stack of normalized.areas[area.id]!.units) {
