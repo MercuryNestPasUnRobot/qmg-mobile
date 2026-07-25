@@ -10,9 +10,20 @@ import {
   type UnitKind,
 } from "./prototype-data";
 import { CARD_CATALOG } from "./generated-card-catalog";
-import type { BotRuntimeState, ControllerType, TotalWarDiscardMode } from "./bot/types";
+import type {
+  BotRuntimeState,
+  BotStrengthSettings,
+  ControllerType,
+  TotalWarDiscardMode,
+} from "./bot/types";
 
 export const SAVE_VERSION = 1;
+export const DEFAULT_BOT_INSPECTION_WINDOW = 8;
+export const DEFAULT_BOT_DISCARD_RECYCLE = 0;
+export const MIN_BOT_INSPECTION_WINDOW = 1;
+export const MAX_BOT_INSPECTION_WINDOW = 20;
+export const MIN_BOT_DISCARD_RECYCLE = 0;
+export const MAX_BOT_DISCARD_RECYCLE = 20;
 export const PHASES = ["开始", "出牌", "空军（Total War）", "补给", "计分", "弃牌", "抽牌"] as const;
 const LEGACY_PHASES = ["部署", "行动", "战斗"] as const;
 export type Phase = (typeof PHASES)[number] | (typeof LEGACY_PHASES)[number];
@@ -115,6 +126,17 @@ export type GameAction =
   | { type: "END_TURN" }
   | { type: "SET_CONTROLLER"; countryId: CountryId; controller: ControllerType }
   | { type: "SET_BOT_CONFIG"; totalWarEnabled: boolean; discardMode: TotalWarDiscardMode }
+  | {
+      type: "SET_BOT_STRENGTH";
+      countryId: CountryId;
+      inspectionWindowSize: number;
+      discardRecycleCount: number;
+    }
+  | {
+      type: "SET_ALL_BOT_STRENGTH";
+      inspectionWindowSize: number;
+      discardRecycleCount: number;
+    }
   | { type: "CLEAR_BOT_SESSION" }
   | { type: "PLACE_UNIT"; areaId: string; countryId: CountryId; kind: UnitKind; auxiliary?: AuxiliaryNation }
   | { type: "REMOVE_UNIT"; areaId: string; countryId: CountryId; kind: UnitKind; auxiliary?: AuxiliaryNation }
@@ -166,6 +188,53 @@ function emptyZones(): Record<CountryId, CardZones> {
   return zones;
 }
 
+function defaultBotStrength(): BotStrengthSettings {
+  return {
+    inspectionWindowSize: DEFAULT_BOT_INSPECTION_WINDOW,
+    discardRecycleCount: DEFAULT_BOT_DISCARD_RECYCLE,
+  };
+}
+
+function allCountryBotStrength(): Record<CountryId, BotStrengthSettings> {
+  return Object.fromEntries(COUNTRIES.map((country) => [country.id, defaultBotStrength()])) as Record<
+    CountryId,
+    BotStrengthSettings
+  >;
+}
+
+function requireBotStrength(inspectionWindowSize: number, discardRecycleCount: number): void {
+  if (
+    !Number.isInteger(inspectionWindowSize) ||
+    inspectionWindowSize < MIN_BOT_INSPECTION_WINDOW ||
+    inspectionWindowSize > MAX_BOT_INSPECTION_WINDOW
+  ) {
+    throw new Error(`检查窗口必须为 ${MIN_BOT_INSPECTION_WINDOW}–${MAX_BOT_INSPECTION_WINDOW}`);
+  }
+  if (
+    !Number.isInteger(discardRecycleCount) ||
+    discardRecycleCount < MIN_BOT_DISCARD_RECYCLE ||
+    discardRecycleCount > MAX_BOT_DISCARD_RECYCLE
+  ) {
+    throw new Error(`弃牌洗回数量必须为 ${MIN_BOT_DISCARD_RECYCLE}–${MAX_BOT_DISCARD_RECYCLE}`);
+  }
+}
+
+function normalizedBotStrength(value?: Partial<BotStrengthSettings>): BotStrengthSettings {
+  const inspectionWindowSize = Number.isInteger(value?.inspectionWindowSize)
+    ? Math.min(
+        MAX_BOT_INSPECTION_WINDOW,
+        Math.max(MIN_BOT_INSPECTION_WINDOW, value!.inspectionWindowSize!),
+      )
+    : DEFAULT_BOT_INSPECTION_WINDOW;
+  const discardRecycleCount = Number.isInteger(value?.discardRecycleCount)
+    ? Math.min(
+        MAX_BOT_DISCARD_RECYCLE,
+        Math.max(MIN_BOT_DISCARD_RECYCLE, value!.discardRecycleCount!),
+      )
+    : DEFAULT_BOT_DISCARD_RECYCLE;
+  return { inspectionWindowSize, discardRecycleCount };
+}
+
 export function createInitialState(now = new Date(), randomUint32?: RandomUint32): GameState {
   const cards: Record<string, Card> = {};
   const cardZones = emptyZones();
@@ -201,6 +270,7 @@ export function createInitialState(now = new Date(), randomUint32?: RandomUint32
           CountryId,
           ControllerType
         >,
+        countrySettings: allCountryBotStrength(),
         config: { totalWarEnabled: false, totalWarDiscardMode: "TOP_CARD" },
         rngState: randomUint32?.() ?? secureRandomUint32(),
         session: null,
@@ -353,6 +423,10 @@ export function describeAction(action: GameAction, state: GameState): string {
       return `${countryById(action.countryId).name}控制方式设为${action.controller}`;
     case "SET_BOT_CONFIG":
       return `Bot Total War ${action.totalWarEnabled ? "开启" : "关闭"}`;
+    case "SET_BOT_STRENGTH":
+      return `${countryById(action.countryId).name} Bot 强度：检查 ${action.inspectionWindowSize}，洗回 ${action.discardRecycleCount}`;
+    case "SET_ALL_BOT_STRENGTH":
+      return `统一 Bot 强度：检查 ${action.inspectionWindowSize}，洗回 ${action.discardRecycleCount}`;
     case "CLEAR_BOT_SESSION":
       return "清除已完成的 Bot 回合";
     case "PLACE_UNIT":
@@ -432,6 +506,22 @@ export function reduceGame(state: GameState, action: GameAction, now = new Date(
         totalWarEnabled: action.totalWarEnabled,
         totalWarDiscardMode: action.discardMode,
       };
+      break;
+    case "SET_BOT_STRENGTH":
+      requireBotStrength(action.inspectionWindowSize, action.discardRecycleCount);
+      next.bot.countrySettings[action.countryId] = {
+        inspectionWindowSize: action.inspectionWindowSize,
+        discardRecycleCount: action.discardRecycleCount,
+      };
+      break;
+    case "SET_ALL_BOT_STRENGTH":
+      requireBotStrength(action.inspectionWindowSize, action.discardRecycleCount);
+      for (const country of COUNTRIES) {
+        next.bot.countrySettings[country.id] = {
+          inspectionWindowSize: action.inspectionWindowSize,
+          discardRecycleCount: action.discardRecycleCount,
+        };
+      }
       break;
     case "CLEAR_BOT_SESSION":
       next.bot.session = null;
@@ -790,6 +880,7 @@ export function normalizeGameState(state: GameState): GameState {
       ControllerType
     >,
     config: { totalWarEnabled: false, totalWarDiscardMode: "TOP_CARD" },
+    countrySettings: allCountryBotStrength(),
     rngState: 0x6d2b79f5,
     session: null,
   };
@@ -799,6 +890,12 @@ export function normalizeGameState(state: GameState): GameState {
       normalized.bot.controllers?.[country.id] === "BOT" ? "BOT" : "HUMAN",
     ]),
   ) as Record<CountryId, ControllerType>;
+  normalized.bot.countrySettings = Object.fromEntries(
+    COUNTRIES.map((country) => [
+      country.id,
+      normalizedBotStrength(normalized.bot.countrySettings?.[country.id]),
+    ]),
+  ) as Record<CountryId, BotStrengthSettings>;
   normalized.bot.config = {
     totalWarEnabled: Boolean(normalized.bot.config?.totalWarEnabled),
     totalWarDiscardMode:

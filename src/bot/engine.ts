@@ -174,8 +174,9 @@ function startModeDecision(state: GameState): GameState {
   const next = clone(state);
   const session = next.bot.session!;
   const zones = next.cardZones[session.countryId];
+  const inspectionWindowSize = next.bot.countrySettings[session.countryId].inspectionWindowSize;
   if (!session.inspectionWindow.length) {
-    for (let index = 0; index < 8 && zones.deck.length; index += 1) {
+    for (let index = 0; index < inspectionWindowSize && zones.deck.length; index += 1) {
       const cardInstanceId = zones.deck.pop()!;
       zones.inspection.push(cardInstanceId);
       session.inspectionWindow.push({ cardInstanceId, originalIndex: index, disposition: "AVAILABLE" });
@@ -308,16 +309,39 @@ function continueModeDecision(state: GameState, continuation: string, answer: Bo
 function cleanup(state: GameState): void {
   const session = state.bot.session!;
   const zones = state.cardZones[session.countryId];
+  const discardRecycleCount = Math.min(
+    state.bot.countrySettings[session.countryId].discardRecycleCount,
+    zones.discard.length,
+  );
   const returning = session.inspectionWindow
     .filter((entry) => entry.disposition === "AVAILABLE" || entry.disposition === "RETURN_TO_DECK")
     .map((entry) => entry.cardInstanceId)
     .filter((id) => zones.inspection.includes(id));
   zones.inspection = zones.inspection.filter((id) => !returning.includes(id));
-  const shuffled = shuffleWithState([...zones.deck, ...returning], state.bot.rngState);
+  const recycled: string[] = [];
+  for (let count = 0; count < discardRecycleCount; count += 1) {
+    const step = nextInt(state.bot.rngState, zones.discard.length);
+    state.bot.rngState = step.state;
+    const [cardId] = zones.discard.splice(step.value, 1);
+    if (cardId) {
+      recycled.push(cardId);
+      session.randomEvents.push({
+        kind: "RANDOM_CARD",
+        result: cardId,
+        reason: "回合结束从弃牌堆随机洗回",
+      });
+    }
+  }
+  const shuffled = shuffleWithState([...zones.deck, ...returning, ...recycled], state.bot.rngState);
   state.bot.rngState = shuffled.state;
   zones.deck = shuffled.items;
-  session.randomEvents.push({ kind: "SHUFFLE", result: returning.length, reason: "检查窗口清理" });
+  session.randomEvents.push({
+    kind: "SHUFFLE",
+    result: returning.length + recycled.length,
+    reason: "检查窗口清理与弃牌回收",
+  });
   session.log.push(`${returning.length} 张未使用检查牌洗回抽牌堆`);
+  if (recycled.length) session.log.push(`${recycled.length} 张随机弃牌洗回抽牌堆`);
   finishTask(session);
   session.phase = "COMPLETE";
   session.isComplete = true;

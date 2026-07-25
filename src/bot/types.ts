@@ -86,8 +86,14 @@ export interface BotConfig {
   totalWarDiscardMode: TotalWarDiscardMode;
 }
 
+export interface BotStrengthSettings {
+  inspectionWindowSize: number;
+  discardRecycleCount: number;
+}
+
 export interface BotRuntimeState {
   controllers: Record<CountryId, ControllerType>;
+  countrySettings: Record<CountryId, BotStrengthSettings>;
   config: BotConfig;
   rngState: number;
   session: BotTurnSession | null;

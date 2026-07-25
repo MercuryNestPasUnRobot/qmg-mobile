@@ -1599,6 +1599,92 @@ textarea {
   padding: 4px 8px;
 }
 
+.bot-strength-manager {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+}
+
+.bot-strength-manager > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bot-strength-manager > header div {
+  display: grid;
+}
+
+.bot-strength-manager > header span {
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.bot-strength-manager h3,
+.bot-strength-manager p {
+  margin: 0;
+}
+
+.bot-strength-manager > header p {
+  max-width: 14rem;
+  color: var(--muted);
+  font-size: 0.65rem;
+  text-align: right;
+}
+
+.bot-strength-row {
+  display: grid;
+  grid-template-columns: minmax(76px, 1fr) repeat(2, minmax(112px, 1fr));
+  gap: 8px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+}
+
+.bot-strength-row > strong {
+  font-size: 0.78rem;
+}
+
+.strength-stepper {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.strength-stepper > span {
+  color: var(--muted);
+  font-size: 0.66rem;
+  white-space: nowrap;
+}
+
+.strength-stepper > div {
+  display: grid;
+  grid-template-columns: 28px 28px 28px;
+  align-items: center;
+}
+
+.strength-stepper button {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.strength-stepper b {
+  text-align: center;
+  font-size: 0.76rem;
+}
+
 .danger-link {
   color: var(--danger);
 }
@@ -1661,6 +1747,30 @@ textarea {
   font-size: 0.72rem;
 }
 
+.start-strength-settings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(2, minmax(112px, 1fr));
+  gap: 7px;
+  align-items: center;
+  padding-top: 3px;
+}
+
+.start-strength-settings > span {
+  color: #eef3e9;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.start-strength-settings .strength-stepper > span {
+  color: rgba(238, 243, 233, 0.7);
+}
+
+.start-strength-settings .strength-stepper button {
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #eef3e9;
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .controller-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1698,6 +1808,24 @@ textarea {
 
 .controller-grid button.is-bot b {
   color: #713328;
+}
+
+@media (max-width: 520px) {
+  .bot-strength-manager > header {
+    align-items: start;
+  }
+
+  .bot-strength-row {
+    grid-template-columns: 1fr;
+  }
+
+  .start-strength-settings {
+    grid-template-columns: 1fr;
+  }
+
+  .start-strength-settings .strength-stepper {
+    width: 100%;
+  }
 }
 
 .bot-turn-panel {

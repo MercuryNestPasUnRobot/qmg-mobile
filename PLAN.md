@@ -1,7 +1,7 @@
-# Simple AI Bot branch plan
+# Simple AI Bot delivery plan
 
-This plan applies to the experimental `agent/simple-ai-bot` branch. The stable
-manual prototype remains on `main`.
+The implementation was developed on `agent/simple-ai-bot` and then merged into
+`main`. The branch remains available as a milestone.
 
 ## Architecture baseline
 
@@ -17,7 +17,7 @@ manual prototype remains on `main`.
 
 1. **Domain foundation** — controller settings, serializable Bot session, seven
    Bot card zones, task/request enums, seeded RNG.
-2. **Core turn runner** — one eight-card inspection window, finite mode queues,
+2. **Core turn runner** — one configurable inspection window, finite mode queues,
    Effective decisions, manual-operation continuations, cleanup and conservation.
 3. **Rule extensions** — early/late-round chains, Total War discard, home
    liberation, Status/Response, Bolster and Air Force extension points.
@@ -25,7 +25,9 @@ manual prototype remains on `main`.
    Response checks.
 5. **Mobile UI** — per-country HUMAN/BOT setup, minimal intervention panel,
    collapsible Bot log, explicit next-turn gate.
-6. **Hardening** — acceptance scenario, save migration, deck exhaustion policy,
+6. **Strength controls** — global setup values and per-country in-game values
+   for inspection-window length and random discard recycling.
+7. **Hardening** — acceptance scenario, save migration, deck exhaustion policy,
    richer automatic supply/control/path evaluation.
 
 ## Non-negotiable behavior
@@ -37,4 +39,3 @@ manual prototype remains on `main`.
   confirmation; they are recorded in the Bot log.
 - Every task, request, inspected card and RNG state is serializable.
 - Rule code stays outside the renderer.
-

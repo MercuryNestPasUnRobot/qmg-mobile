@@ -1,5 +1,9 @@
 import "./styles.css";
 import {
+  MAX_BOT_DISCARD_RECYCLE,
+  MAX_BOT_INSPECTION_WINDOW,
+  MIN_BOT_DISCARD_RECYCLE,
+  MIN_BOT_INSPECTION_WINDOW,
   type AuxiliaryNation,
   type Card,
   type CardType,
@@ -761,6 +765,7 @@ function renderLog(): string {
 function renderSave(): string {
   const state = store.state;
   const packs = Object.values(state.expansionPacks);
+  const botCountries = COUNTRIES.filter((country) => state.bot.controllers[country.id] === "BOT");
   return `
     <section class="view-section">
       <div class="section-heading">
@@ -816,6 +821,41 @@ function renderSave(): string {
         <strong>本轮自动化边界</strong>
         <p>卡牌效果、战斗、补给与胜负条件由玩家自行判断；应用负责保存局面和操作记录。</p>
       </aside>
+      <section class="bot-strength-manager panel">
+        <header>
+          <div>
+            <span>SOLO BOT</span>
+            <h3>逐国强度设置</h3>
+          </div>
+          <p>修改只作用于所选 Bot，并自动保存。</p>
+        </header>
+        ${
+          botCountries.length
+            ? botCountries
+                .map((country) => {
+                  const settings = state.bot.countrySettings[country.id];
+                  return `
+                    <article class="bot-strength-row">
+                      <strong>${country.name}</strong>
+                      ${renderStrengthStepper(
+                        "检查窗口",
+                        settings.inspectionWindowSize,
+                        "inspectionWindowSize",
+                        country.id,
+                      )}
+                      ${renderStrengthStepper(
+                        "弃牌洗回",
+                        settings.discardRecycleCount,
+                        "discardRecycleCount",
+                        country.id,
+                      )}
+                    </article>
+                  `;
+                })
+                .join("")
+            : '<p class="empty-state">当前没有由 Bot 控制的国家。</p>'
+        }
+      </section>
     </section>
   `;
 }
@@ -861,6 +901,7 @@ function renderNavigation(): string {
 
 function renderStartScreen(): string {
   const state = store.state;
+  const globalStrength = state.bot.countrySettings.germany;
   return `
     <main class="game-start-screen">
       <section class="game-start-card">
@@ -881,11 +922,44 @@ function renderStartScreen(): string {
           <button class="total-war-toggle ${state.bot.config.totalWarEnabled ? "is-active" : ""}" data-action="toggle-total-war">
             Total War：${state.bot.config.totalWarEnabled ? "开启" : "关闭"}
           </button>
+          <div class="start-strength-settings">
+            <span>统一 Bot 强度</span>
+            ${renderStrengthStepper(
+              "检查窗口",
+              globalStrength.inspectionWindowSize,
+              "inspectionWindowSize",
+            )}
+            ${renderStrengthStepper(
+              "弃牌洗回",
+              globalStrength.discardRecycleCount,
+              "discardRecycleCount",
+            )}
+          </div>
           <p>Bot 只会在你点击回合按钮后运行；完成后会停住等待下一次点击。</p>
         </div>
         <button class="button button--primary button--wide" data-action="enter-game">进入战局</button>
       </section>
     </main>
+  `;
+}
+
+function renderStrengthStepper(
+  label: string,
+  value: number,
+  field: "inspectionWindowSize" | "discardRecycleCount",
+  countryId?: CountryId,
+): string {
+  const action = countryId ? "adjust-country-bot-strength" : "adjust-all-bot-strength";
+  const countryAttribute = countryId ? ` data-country-id="${countryId}"` : "";
+  return `
+    <div class="strength-stepper">
+      <span>${label}</span>
+      <div>
+        <button data-action="${action}" data-field="${field}" data-delta="-1"${countryAttribute} aria-label="${label}减少">−</button>
+        <b>${value}</b>
+        <button data-action="${action}" data-field="${field}" data-delta="1"${countryAttribute} aria-label="${label}增加">＋</button>
+      </div>
+    </div>
   `;
 }
 
@@ -999,6 +1073,56 @@ app.addEventListener("click", (event) => {
       type: "SET_BOT_CONFIG",
       totalWarEnabled: !store.state.bot.config.totalWarEnabled,
       discardMode: store.state.bot.config.totalWarDiscardMode,
+    });
+    render();
+    return;
+  }
+  if (action === "adjust-all-bot-strength") {
+    const current = store.state.bot.countrySettings.germany;
+    const field = button.dataset.field as "inspectionWindowSize" | "discardRecycleCount";
+    const delta = Number(button.dataset.delta);
+    const inspectionWindowSize =
+      field === "inspectionWindowSize"
+        ? Math.min(
+            MAX_BOT_INSPECTION_WINDOW,
+            Math.max(MIN_BOT_INSPECTION_WINDOW, current.inspectionWindowSize + delta),
+          )
+        : current.inspectionWindowSize;
+    const discardRecycleCount =
+      field === "discardRecycleCount"
+        ? Math.min(
+            MAX_BOT_DISCARD_RECYCLE,
+            Math.max(MIN_BOT_DISCARD_RECYCLE, current.discardRecycleCount + delta),
+          )
+        : current.discardRecycleCount;
+    store.execute({ type: "SET_ALL_BOT_STRENGTH", inspectionWindowSize, discardRecycleCount });
+    render();
+    return;
+  }
+  if (action === "adjust-country-bot-strength") {
+    const countryId = button.dataset.countryId as CountryId;
+    const current = store.state.bot.countrySettings[countryId];
+    const field = button.dataset.field as "inspectionWindowSize" | "discardRecycleCount";
+    const delta = Number(button.dataset.delta);
+    const inspectionWindowSize =
+      field === "inspectionWindowSize"
+        ? Math.min(
+            MAX_BOT_INSPECTION_WINDOW,
+            Math.max(MIN_BOT_INSPECTION_WINDOW, current.inspectionWindowSize + delta),
+          )
+        : current.inspectionWindowSize;
+    const discardRecycleCount =
+      field === "discardRecycleCount"
+        ? Math.min(
+            MAX_BOT_DISCARD_RECYCLE,
+            Math.max(MIN_BOT_DISCARD_RECYCLE, current.discardRecycleCount + delta),
+          )
+        : current.discardRecycleCount;
+    store.execute({
+      type: "SET_BOT_STRENGTH",
+      countryId,
+      inspectionWindowSize,
+      discardRecycleCount,
     });
     render();
     return;

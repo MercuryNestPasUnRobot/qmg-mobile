@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createInitialState, type CardType, type GameState } from "../game";
+import { createInitialState, reduceGame, type CardType, type GameState } from "../game";
 import { GameStore, type StorageLike } from "../store";
 import {
   answerBotRequest,
@@ -82,6 +82,71 @@ describe("solo bot domain engine", () => {
     expect(started.bot.session?.inspectionWindow).toHaveLength(8);
     expect(started.cardZones.germany.inspection).toHaveLength(8);
     expect(started.cardZones.germany.deck).toHaveLength(1);
+  });
+
+  it("supports global defaults and independent per-country strength settings", () => {
+    let state = createInitialState();
+    expect(state.bot.countrySettings.germany).toEqual({
+      inspectionWindowSize: 8,
+      discardRecycleCount: 0,
+    });
+    state = reduceGame(state, {
+      type: "SET_ALL_BOT_STRENGTH",
+      inspectionWindowSize: 6,
+      discardRecycleCount: 2,
+    });
+    expect(Object.values(state.bot.countrySettings).every((settings) => settings.inspectionWindowSize === 6)).toBe(
+      true,
+    );
+    state = reduceGame(state, {
+      type: "SET_BOT_STRENGTH",
+      countryId: "japan",
+      inspectionWindowSize: 3,
+      discardRecycleCount: 1,
+    });
+    expect(state.bot.countrySettings.japan).toEqual({
+      inspectionWindowSize: 3,
+      discardRecycleCount: 1,
+    });
+    expect(state.bot.countrySettings.germany).toEqual({
+      inspectionWindowSize: 6,
+      discardRecycleCount: 2,
+    });
+  });
+
+  it("uses the configured inspection window for the current bot", () => {
+    const state = withWindow(["response", "sea-battle", "build-army", "event", "status"]);
+    state.bot.countrySettings.germany.inspectionWindowSize = 3;
+    const started = startBotTurn(state);
+    expect(started.bot.session?.inspectionWindow).toHaveLength(3);
+    expect(started.cardZones.germany.inspection).toHaveLength(3);
+    expect(started.cardZones.germany.deck).toHaveLength(2);
+  });
+
+  it("randomly returns the configured number of discard cards at cleanup", () => {
+    const makeState = (): GameState => {
+      const state = withWindow(["land-battle"]);
+      const used = new Set(state.cardZones.germany.deck);
+      const discard = ["response", "event", "status"].map((type) => {
+        const id = cardOfType(state, type as CardType, used);
+        used.add(id);
+        return id;
+      });
+      state.cardZones.germany.discard = discard;
+      state.bot.countrySettings.germany.inspectionWindowSize = 1;
+      state.bot.countrySettings.germany.discardRecycleCount = 2;
+      state.bot.rngState = 987654;
+      return state;
+    };
+    const finish = (initial: GameState): GameState => answerBotRequest(startBotTurn(initial), "YES");
+    const first = finish(makeState());
+    const second = finish(makeState());
+    expect(first.bot.session?.isComplete).toBe(true);
+    expect(first.cardZones.germany.discard).toHaveLength(1);
+    expect(first.cardZones.germany.deck).toHaveLength(3);
+    expect(first.cardZones.germany.discard).toEqual(second.cardZones.germany.discard);
+    expect(first.cardZones.germany.deck).toEqual(second.cardZones.germany.deck);
+    expect(first.bot.session?.randomEvents.filter((event) => event.kind === "RANDOM_CARD")).toHaveLength(2);
   });
 
   it("keeps nonmatching and ineffective cards in the inspection buffer", () => {

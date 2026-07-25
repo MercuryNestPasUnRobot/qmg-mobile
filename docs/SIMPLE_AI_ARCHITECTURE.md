@@ -1,16 +1,17 @@
 # Solo Bot architecture
 
-## Why this is a separate branch
+## Integration status
 
 The stable application is a manual board-state and card assistant, not a rules
-engine. Solo Bot adds persistent orchestration and therefore lives on
-`agent/simple-ai-bot` until its rule boundaries and mobile workflow are proven.
+engine. Solo Bot was developed on `agent/simple-ai-bot` so its history remains
+isolated, then merged into `main` as an experimental, player-assisted mode.
 
 ## State ownership
 
 `GameState.bot` is saved and undone with the rest of the game:
 
 - per-country `HUMAN | BOT` controllers;
+- per-country inspection-window and discard-recycling settings;
 - Total War configuration;
 - serializable RNG state;
 - at most one active `BotTurnSession`.
@@ -35,7 +36,8 @@ is explicit:
 | REMOVED_FROM_GAME | `removed` |
 
 The engine never interprets “not Effective” as discard. Cleanup shuffles only
-AVAILABLE/RETURN_TO_DECK cards back into the draw deck.
+AVAILABLE/RETURN_TO_DECK cards plus the configured number of randomly selected
+discard cards back into the draw deck.
 
 ## Execution model
 
@@ -60,6 +62,10 @@ shuffles and random card selection consume that state. Tests can start from a
 known seed and reproduce the same sequence. Initial game-deck shuffling still
 uses the browser cryptographic source.
 
+The setup screen applies one strength profile to all six countries. The Save
+view exposes the same values per Bot at its bottom. Defaults are an eight-card
+inspection window and zero discard cards recycled after the turn.
+
 ## Turn gate
 
 - HUMAN current country: click ends the turn.
@@ -77,4 +83,3 @@ round discards, Total War discard, home liberation and Response rolls are
 automated. Supply, control, pathfinding and most card text remain manual
 questions because the prototype map state does not yet encode ownership,
 supplied status or a full card-effect DSL.
-

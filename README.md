@@ -4,8 +4,8 @@
 
 > 本项目当前是 **prototype**，不是完整的规则引擎。卡牌效果、战斗、补给与胜负条件由玩家按实体规则手动判断。
 
-> `agent/simple-ai-bot` 分支包含实验性的 Solo Bot 辅助模式。架构与分阶段计划见
-> `docs/SIMPLE_AI_ARCHITECTURE.md` 和 `PLAN.md`；稳定人工模式仍以 `main` 为准。
+> `main` 已包含实验性的 Solo Bot 辅助模式，原始开发历史保留在
+> `agent/simple-ai-bot`。架构与分阶段计划见 `docs/SIMPLE_AI_ARCHITECTURE.md` 和 `PLAN.md`。
 
 ## 已实现
 
@@ -32,13 +32,14 @@
 - PWA manifest、离线 service worker 和可安装图标
 - GitHub Pages 自动部署工作流
 
-## 实验性 Solo Bot 分支
+## 实验性 Solo Bot
 
-`agent/simple-ai-bot` 在开始界面为六国分别提供 HUMAN / BOT 设置。Bot 使用同一个最多 8
-张的检查窗口、可恢复的有限任务队列和可复现随机状态；只在需要局面判断、Effective 判断或
-实体操作时暂停。Bot 完成当前国家后不会自动进入下一国。
+开始界面为六国分别提供 HUMAN / BOT 设置，并可统一调整检查窗口（默认 8）以及每回合从
+弃牌堆随机洗回牌库的数量（默认 0）。进入战局后，可在“存档”页最底部为每个 Bot 单独调整。
+Bot 使用可恢复的有限任务队列和可复现随机状态；只在需要局面判断、Effective 判断或实体
+操作时暂停。Bot 完成当前国家后不会自动进入下一国。
 
-该分支已经覆盖 Expansion / Aggressive / Defensive 基础队列、前后 10 轮分支、Status /
+当前实现已经覆盖 Expansion / Aggressive / Defensive 基础队列、前后 10 轮分支、Status /
 Response 部署、Bolster / Air Force 搜索、本土解放、Total War 弃牌和 Response 事件接口。
 补给、控制权、路径与复杂卡牌文本仍通过最小人工问题处理。
 
@@ -108,7 +109,7 @@ npm run preview
 
 ## 当前限制
 
-- `main` 没有 AI；`agent/simple-ai-bot` 只有实验性 Solo Bot，不包含完整规则 AI。项目仍没有联网、账号或跨设备同步。
+- Solo Bot 是需要玩家判断局面和执行卡牌效果的实验性辅助流程，不是完整规则 AI。项目仍没有联网、账号或跨设备同步。
 - 不自动执行卡牌效果，不自动计算战斗、补给或胜负。
 - 地图连接数据由规则地图人工适配，尚未经过出版方的官方数字地图数据校验。
 - 单位只有放置和移除两种局面编辑操作；由卡牌导致的位置变化请以“原区域移除、目标区域放置”记录。
