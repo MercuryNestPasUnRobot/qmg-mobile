@@ -740,7 +740,28 @@ summary:focus-visible {
   line-height: 1;
 }
 
+.map-token i {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+  display: grid;
+  width: 15px;
+  height: 15px;
+  place-items: center;
+  border: 1px solid white;
+  border-radius: 50%;
+  color: #172019;
+  background: #fff0b7;
+  font-size: 0.48rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
 .map-token--air-force b {
+  transform: rotate(-45deg);
+}
+
+.map-token--air-force i {
   transform: rotate(-45deg);
 }
 
@@ -2140,6 +2161,12 @@ textarea {
   grid-template-columns: 0.75fr 0.75fr 1.1fr;
 }
 
+.inline-picker--auxiliaries button {
+  flex: 1;
+  border-bottom: 3px solid var(--auxiliary-color, rgba(255, 255, 255, 0.2));
+  white-space: nowrap;
+}
+
 .inline-picker--units svg {
   width: 15px;
   height: 15px;
@@ -2776,6 +2803,12 @@ textarea {
     box-shadow: none;
   }
 
+  .war-table > .area-command.has-auxiliary {
+    grid-template-columns:
+      minmax(82px, 0.65fr) minmax(112px, 0.85fr) minmax(178px, 1.3fr)
+      minmax(118px, 0.9fr) minmax(105px, 0.85fr);
+  }
+
   .area-command__title {
     grid-column: 1;
     grid-row: 1;
@@ -2794,10 +2827,20 @@ textarea {
     align-self: stretch;
   }
 
+  .inline-picker--auxiliaries {
+    grid-column: 4;
+    grid-row: 1;
+    align-self: stretch;
+  }
+
   .unit-strip {
     grid-column: 4;
     grid-row: 1;
     align-content: center;
+  }
+
+  .area-command.has-auxiliary .unit-strip {
+    grid-column: 5;
   }
 
   .inline-picker button {

@@ -43,6 +43,101 @@ describe("prototype game state", () => {
     expect(state.areas["western-europe"]?.units).toHaveLength(0);
   });
 
+  it("keeps Chinese and French auxiliary units separate from their parent countries", () => {
+    let state = createInitialState();
+    state = reduceGame(state, {
+      type: "PLACE_UNIT",
+      areaId: "eastern-china",
+      countryId: "united-states",
+      kind: "army",
+    });
+    state = reduceGame(state, {
+      type: "PLACE_UNIT",
+      areaId: "eastern-china",
+      countryId: "united-states",
+      kind: "army",
+      auxiliary: "china",
+    });
+    state = reduceGame(state, {
+      type: "PLACE_UNIT",
+      areaId: "central-pacific",
+      countryId: "united-states",
+      kind: "navy",
+      auxiliary: "china",
+    });
+    state = reduceGame(state, {
+      type: "PLACE_UNIT",
+      areaId: "eastern-china",
+      countryId: "united-states",
+      kind: "air-force",
+      auxiliary: "china",
+    });
+    state = reduceGame(state, {
+      type: "PLACE_UNIT",
+      areaId: "western-europe",
+      countryId: "united-kingdom",
+      kind: "army",
+      auxiliary: "france",
+    });
+    state = reduceGame(state, {
+      type: "PLACE_UNIT",
+      areaId: "north-atlantic",
+      countryId: "united-kingdom",
+      kind: "navy",
+      auxiliary: "france",
+    });
+    state = reduceGame(state, {
+      type: "PLACE_UNIT",
+      areaId: "western-europe",
+      countryId: "united-kingdom",
+      kind: "air-force",
+      auxiliary: "france",
+    });
+
+    expect(state.areas["eastern-china"]?.units).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ countryId: "united-states", kind: "army", auxiliary: undefined }),
+        expect.objectContaining({ countryId: "united-states", kind: "army", auxiliary: "china" }),
+        expect.objectContaining({ countryId: "united-states", kind: "air-force", auxiliary: "china" }),
+      ]),
+    );
+    expect(state.areas["central-pacific"]?.units[0]?.auxiliary).toBe("china");
+    expect(state.areas["western-europe"]?.units.map((stack) => stack.auxiliary)).toEqual(["france", "france"]);
+    expect(state.areas["north-atlantic"]?.units[0]?.auxiliary).toBe("france");
+
+    state = reduceGame(state, {
+      type: "REMOVE_UNIT",
+      areaId: "eastern-china",
+      countryId: "united-states",
+      kind: "army",
+      auxiliary: "china",
+    });
+    expect(state.areas["eastern-china"]?.units.some((stack) => stack.kind === "army" && !stack.auxiliary)).toBe(true);
+    expect(state.areas["eastern-china"]?.units.some((stack) => stack.kind === "army" && stack.auxiliary)).toBe(false);
+  });
+
+  it("only allows China under the United States and France under the United Kingdom", () => {
+    const state = createInitialState();
+    expect(() =>
+      reduceGame(state, {
+        type: "PLACE_UNIT",
+        areaId: "western-europe",
+        countryId: "united-kingdom",
+        kind: "army",
+        auxiliary: "china",
+      }),
+    ).toThrow("不能使用");
+    expect(() =>
+      reduceGame(state, {
+        type: "PLACE_UNIT",
+        areaId: "western-europe",
+        countryId: "united-states",
+        kind: "army",
+        auxiliary: "france",
+      }),
+    ).toThrow("不能使用");
+  });
+
   it("rejects units placed on incompatible terrain", () => {
     const state = createInitialState();
     expect(() =>

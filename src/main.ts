@@ -1,5 +1,11 @@
 import "./styles.css";
-import { type Card, type CardType, type GameAction, type UnitStack } from "./game";
+import {
+  type AuxiliaryNation,
+  type Card,
+  type CardType,
+  type GameAction,
+  type UnitStack,
+} from "./game";
 import {
   AREAS,
   COUNTRIES,
@@ -36,6 +42,7 @@ let handCountryId: CountryId = countriesForFaction(store.state.activeFaction)[0]
 let selectedCardId: string | null = null;
 let unitCountryId: CountryId = handCountryId;
 let selectedUnitKind: UnitKind = "army";
+let selectedAuxiliary: AuxiliaryNation | null = null;
 let cardPanelMode: "deck" | "discard" | "custom" | null = null;
 let cardSearch = "";
 let toastMessage = "";
@@ -172,21 +179,38 @@ function unitIcon(kind: UnitKind): string {
   return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 13 7-2 2-8 2 8 7 2-7 2-2 6-2-6-7-2Z"/></svg>';
 }
 
+const AUXILIARY_NATIONS: Record<
+  AuxiliaryNation,
+  { name: string; shortName: string; color: string }
+> = {
+  china: { name: "中国", shortName: "中", color: "#a94435" },
+  france: { name: "法国", shortName: "法", color: "#3b67a5" },
+};
+
+function auxiliaryForCountry(countryId: CountryId): AuxiliaryNation | null {
+  if (countryId === "united-states") return "china";
+  if (countryId === "united-kingdom") return "france";
+  return null;
+}
+
 function renderUnitStack(stack: UnitStack): string {
   const country = countryById(stack.countryId);
+  const auxiliary = stack.auxiliary ? AUXILIARY_NATIONS[stack.auxiliary] : null;
   return `
-    <span class="unit-chip" style="--unit-color:${country.color}">
+    <span class="unit-chip" style="--unit-color:${auxiliary?.color ?? country.color}">
       <span class="unit-chip__icon">${unitIcon(stack.kind)}</span>
-      ${country.shortName} ${unitName(stack.kind)} ×${stack.count}
+      ${auxiliary?.name ?? country.shortName} ${unitName(stack.kind)} ×${stack.count}
     </span>
   `;
 }
 
 function renderMapToken(stack: UnitStack): string {
   const country = countryById(stack.countryId);
+  const auxiliary = stack.auxiliary ? AUXILIARY_NATIONS[stack.auxiliary] : null;
   return `
-    <span class="map-token map-token--${stack.kind}" style="--token-color:${country.color}" title="${country.name}${unitName(stack.kind)} ×${stack.count}">
+    <span class="map-token map-token--${stack.kind}" style="--token-color:${auxiliary?.color ?? country.color}" title="${auxiliary?.name ?? country.name}${unitName(stack.kind)} ×${stack.count}">
       ${unitIcon(stack.kind)}
+      ${auxiliary ? `<i>${auxiliary.shortName}</i>` : ""}
       ${stack.count > 1 ? `<b>${stack.count}</b>` : ""}
     </span>
   `;
@@ -199,11 +223,13 @@ function renderAreaDetail(): string {
   const compatibleKind: UnitKind = definition.kind === "land" ? "army" : "navy";
   const visibleCountries = countriesForFaction(state.activeFaction);
   if (!visibleCountries.some((country) => country.id === unitCountryId)) unitCountryId = visibleCountries[0]!.id;
+  const availableAuxiliary = auxiliaryForCountry(unitCountryId);
+  if (!availableAuxiliary || (selectedAuxiliary && selectedAuxiliary !== availableAuxiliary)) selectedAuxiliary = null;
   if (selectedUnitKind !== "air-force" && selectedUnitKind !== compatibleKind) selectedUnitKind = compatibleKind;
   const stacks = area.units;
 
   return `
-    <section class="area-command" aria-label="${definition.name}单位操作">
+    <section class="area-command ${availableAuxiliary ? "has-auxiliary" : ""}" aria-label="${definition.name}单位操作">
       <div class="area-command__title">
         <span>${definition.kind === "land" ? "陆地" : "海域"}</span>
         <strong>${definition.name}${definition.supply ? " ★" : ""}</strong>
@@ -232,13 +258,25 @@ function renderAreaDetail(): string {
           .join("")}
         <button class="quick-place" data-action="quick-place-unit" aria-label="在${definition.name}放置${unitName(selectedUnitKind)}">＋ 放置</button>
       </div>
+      ${
+        availableAuxiliary
+          ? `
+            <div class="inline-picker inline-picker--auxiliaries" aria-label="选择附属国">
+              <button class="${selectedAuxiliary === null ? "is-active" : ""}" data-action="select-auxiliary" data-auxiliary="">附属国：关</button>
+              <button class="${selectedAuxiliary === availableAuxiliary ? "is-active" : ""}" data-action="select-auxiliary" data-auxiliary="${availableAuxiliary}" style="--auxiliary-color:${AUXILIARY_NATIONS[availableAuxiliary].color}">
+                ${AUXILIARY_NATIONS[availableAuxiliary].name}
+              </button>
+            </div>
+          `
+          : ""
+      }
       <div class="unit-strip" data-scroll-key="unit-strip">
         ${
           stacks.length
             ? stacks
                 .map(
                   (stack) => `
-                    <button class="unit-remove-chip" data-action="quick-remove-unit" data-country-id="${stack.countryId}" data-unit-kind="${stack.kind}" title="移除1支${countryById(stack.countryId).name}${unitName(stack.kind)}">
+                    <button class="unit-remove-chip" data-action="quick-remove-unit" data-country-id="${stack.countryId}" data-unit-kind="${stack.kind}" data-auxiliary="${stack.auxiliary ?? ""}" title="移除1支${stack.auxiliary ? AUXILIARY_NATIONS[stack.auxiliary].name : countryById(stack.countryId).name}${unitName(stack.kind)}">
                       ${renderUnitStack(stack)}<b>−</b>
                     </button>
                   `,
@@ -981,6 +1019,7 @@ app.addEventListener("click", (event) => {
   if (action === "select-unit-country") {
     handCountryId = button.dataset.countryId as CountryId;
     unitCountryId = handCountryId;
+    selectedAuxiliary = null;
     selectedCardId = null;
     cardPanelMode = null;
     render();
@@ -991,9 +1030,20 @@ app.addEventListener("click", (event) => {
     render();
     return;
   }
+  if (action === "select-auxiliary") {
+    selectedAuxiliary = (button.dataset.auxiliary as AuxiliaryNation) || null;
+    render();
+    return;
+  }
   if (action === "quick-place-unit") {
     execute(
-      { type: "PLACE_UNIT", areaId: selectedAreaId, countryId: unitCountryId, kind: selectedUnitKind },
+      {
+        type: "PLACE_UNIT",
+        areaId: selectedAreaId,
+        countryId: unitCountryId,
+        kind: selectedUnitKind,
+        auxiliary: selectedAuxiliary ?? undefined,
+      },
       "单位已放置",
     );
     return;
@@ -1005,6 +1055,7 @@ app.addEventListener("click", (event) => {
         areaId: selectedAreaId,
         countryId: button.dataset.countryId as CountryId,
         kind: button.dataset.unitKind as UnitKind,
+        auxiliary: (button.dataset.auxiliary as AuxiliaryNation) || undefined,
       },
       "单位已移除",
     );

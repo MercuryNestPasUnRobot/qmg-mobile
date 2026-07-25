@@ -28,10 +28,12 @@ export type CardType =
   | "air-power"
   | "bolster"
   | "other";
+export type AuxiliaryNation = "china" | "france";
 
 export interface UnitStack {
   countryId: CountryId;
   kind: UnitKind;
+  auxiliary?: AuxiliaryNation;
   count: number;
 }
 
@@ -105,8 +107,8 @@ export type GameAction =
   | { type: "SET_TURN_COUNTRY"; countryId: CountryId }
   | { type: "SET_PHASE"; phase: Phase }
   | { type: "END_TURN" }
-  | { type: "PLACE_UNIT"; areaId: string; countryId: CountryId; kind: UnitKind }
-  | { type: "REMOVE_UNIT"; areaId: string; countryId: CountryId; kind: UnitKind }
+  | { type: "PLACE_UNIT"; areaId: string; countryId: CountryId; kind: UnitKind; auxiliary?: AuxiliaryNation }
+  | { type: "REMOVE_UNIT"; areaId: string; countryId: CountryId; kind: UnitKind; auxiliary?: AuxiliaryNation }
   | { type: "DRAW_CARD"; countryId: CountryId }
   | { type: "DISCARD_CARD"; countryId: CountryId; cardId: string }
   | { type: "DISCARD_DECK_CARD"; countryId: CountryId; cardId: string }
@@ -195,8 +197,32 @@ function addLog(state: GameState, message: string, now = new Date()): void {
   state.updatedAt = now.toISOString();
 }
 
-function findStack(area: AreaState, countryId: CountryId, kind: UnitKind): UnitStack | undefined {
-  return area.units.find((stack) => stack.countryId === countryId && stack.kind === kind);
+function findStack(
+  area: AreaState,
+  countryId: CountryId,
+  kind: UnitKind,
+  auxiliary?: AuxiliaryNation,
+): UnitStack | undefined {
+  return area.units.find(
+    (stack) =>
+      stack.countryId === countryId && stack.kind === kind && (stack.auxiliary ?? undefined) === auxiliary,
+  );
+}
+
+function auxiliaryName(auxiliary?: AuxiliaryNation): string {
+  if (auxiliary === "china") return "中国";
+  if (auxiliary === "france") return "法国";
+  return "";
+}
+
+function requireValidAuxiliary(countryId: CountryId, auxiliary?: AuxiliaryNation): void {
+  if (!auxiliary) return;
+  if (
+    (auxiliary === "china" && countryId !== "united-states") ||
+    (auxiliary === "france" && countryId !== "united-kingdom")
+  ) {
+    throw new Error("该国家不能使用所选附属国");
+  }
 }
 
 function requireCompatibleArea(areaId: string, kind: UnitKind): void {
@@ -245,11 +271,11 @@ export function describeAction(action: GameAction, state: GameState): string {
       return `结束${countryById(state.turnCountry).name}回合，交给${countryById(TURN_ORDER[(index + 1) % TURN_ORDER.length]!).name}`;
     }
     case "PLACE_UNIT":
-      return `${countryById(action.countryId).name}在${areaById(action.areaId).name}放置1支${
+      return `${auxiliaryName(action.auxiliary) || countryById(action.countryId).name}在${areaById(action.areaId).name}放置1支${
         action.kind === "army" ? "陆军" : action.kind === "navy" ? "海军" : "空军"
       }`;
     case "REMOVE_UNIT":
-      return `${countryById(action.countryId).name}从${areaById(action.areaId).name}移除1支${
+      return `${auxiliaryName(action.auxiliary) || countryById(action.countryId).name}从${areaById(action.areaId).name}移除1支${
         action.kind === "army" ? "陆军" : action.kind === "navy" ? "海军" : "空军"
       }`;
     case "DRAW_CARD":
@@ -316,17 +342,19 @@ export function reduceGame(state: GameState, action: GameAction, now = new Date(
     case "PLACE_UNIT": {
       requireCompatibleArea(action.areaId, action.kind);
       countryById(action.countryId);
+      requireValidAuxiliary(action.countryId, action.auxiliary);
       const area = next.areas[action.areaId];
       if (!area) throw new Error("区域不存在");
-      const stack = findStack(area, action.countryId, action.kind);
+      const stack = findStack(area, action.countryId, action.kind, action.auxiliary);
       if (stack) stack.count += 1;
-      else area.units.push({ countryId: action.countryId, kind: action.kind, count: 1 });
+      else area.units.push({ countryId: action.countryId, kind: action.kind, auxiliary: action.auxiliary, count: 1 });
       break;
     }
     case "REMOVE_UNIT": {
+      requireValidAuxiliary(action.countryId, action.auxiliary);
       const area = next.areas[action.areaId];
       if (!area) throw new Error("区域不存在");
-      const stack = findStack(area, action.countryId, action.kind);
+      const stack = findStack(area, action.countryId, action.kind, action.auxiliary);
       if (!stack?.count) throw new Error("没有可移除的单位");
       stack.count -= 1;
       if (stack.count === 0) area.units = area.units.filter((candidate) => candidate !== stack);
@@ -549,7 +577,10 @@ const LEGACY_AREA_MAPPINGS: Readonly<Record<string, string>> = {
 function mergeAreaUnits(target: AreaState, source: AreaState): void {
   for (const sourceStack of source.units) {
     const targetStack = target.units.find(
-      (stack) => stack.countryId === sourceStack.countryId && stack.kind === sourceStack.kind,
+      (stack) =>
+        stack.countryId === sourceStack.countryId &&
+        stack.kind === sourceStack.kind &&
+        (stack.auxiliary ?? undefined) === sourceStack.auxiliary,
     );
     if (targetStack) targetStack.count += sourceStack.count;
     else target.units.push(structuredClone(sourceStack));
@@ -640,6 +671,15 @@ export function normalizeGameState(state: GameState): GameState {
   const normalized = cloneState(state);
   for (const area of AREAS) {
     if (!normalized.areas[area.id]) normalized.areas[area.id] = { id: area.id, units: [] };
+    for (const stack of normalized.areas[area.id]!.units) {
+      if (
+        (stack.auxiliary === "china" && stack.countryId !== "united-states") ||
+        (stack.auxiliary === "france" && stack.countryId !== "united-kingdom") ||
+        (stack.auxiliary && stack.auxiliary !== "china" && stack.auxiliary !== "france")
+      ) {
+        delete stack.auxiliary;
+      }
+    }
   }
   for (const [legacyId, targetId] of Object.entries(LEGACY_AREA_MAPPINGS)) {
     const legacy = normalized.areas[legacyId];
