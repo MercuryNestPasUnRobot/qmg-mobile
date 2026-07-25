@@ -317,15 +317,18 @@ function renderMap(): string {
           <span><i class="legend-swatch legend-swatch--sea"></i>海</span>
           <span><i class="legend-swatch legend-swatch--strait"></i>海峡</span>
         </div>
-        <div class="map-tools" aria-label="地图缩放">
-          <label class="map-height-control" for="map-height">
+        <div class="map-tools" aria-label="地图大小">
+          <div class="map-height-control" aria-label="地图高度">
             <span>高度</span>
-            <input id="map-height" type="range" min="70" max="260" step="5" value="${mapPanelHeight}" aria-label="地图显示高度" />
-            <output id="map-height-value" for="map-height">${mapPanelHeight}</output>
-          </label>
-          <button class="icon-button icon-button--small" data-action="map-zoom" data-width="760" aria-label="缩小地图">−</button>
-          <button class="icon-button icon-button--small" data-action="map-zoom" data-width="0" aria-label="地图适应宽度">适</button>
-          <button class="icon-button icon-button--small" data-action="map-zoom" data-width="1220" aria-label="放大地图">＋</button>
+            <button class="icon-button icon-button--small" data-action="map-height-step" data-delta="-15" aria-label="降低地图高度">−</button>
+            <button class="icon-button icon-button--small" data-action="map-height-step" data-delta="15" aria-label="增加地图高度">＋</button>
+          </div>
+          <div class="map-width-control" aria-label="地图内容缩放">
+            <span>缩放</span>
+            <button class="icon-button icon-button--small" data-action="map-zoom" data-width="760" aria-label="缩小地图">−</button>
+            <button class="icon-button icon-button--small" data-action="map-zoom" data-width="0" aria-label="地图适应宽度">适</button>
+            <button class="icon-button icon-button--small" data-action="map-zoom" data-width="1220" aria-label="放大地图">＋</button>
+          </div>
         </div>
       </div>
       <div class="map-stage">
@@ -833,6 +836,16 @@ app.addEventListener("click", (event) => {
     render();
     return;
   }
+  if (action === "map-height-step") {
+    mapPanelHeight = Math.min(260, Math.max(70, mapPanelHeight + Number(button.dataset.delta)));
+    app.querySelector<HTMLElement>(".war-table")?.style.setProperty("--map-panel-height", `${mapPanelHeight}px`);
+    try {
+      window.localStorage.setItem(MAP_HEIGHT_STORAGE_KEY, String(mapPanelHeight));
+    } catch {
+      // The control still works for this session if preference storage is unavailable.
+    }
+    return;
+  }
   if (action === "map-zoom") {
     const viewport = button.closest(".view-section")?.querySelector<HTMLElement>(".map-viewport");
     if (viewport) mapScrollLeft = viewport.scrollLeft;
@@ -1125,18 +1138,6 @@ app.addEventListener("change", (event) => {
 app.addEventListener("input", (event) => {
   const target = event.target;
   if (!(target instanceof HTMLInputElement)) return;
-  if (target.id === "map-height") {
-    mapPanelHeight = Math.min(260, Math.max(70, Number(target.value)));
-    app.querySelector<HTMLElement>(".war-table")?.style.setProperty("--map-panel-height", `${mapPanelHeight}px`);
-    const output = app.querySelector<HTMLOutputElement>("#map-height-value");
-    if (output) output.textContent = String(mapPanelHeight);
-    try {
-      window.localStorage.setItem(MAP_HEIGHT_STORAGE_KEY, String(mapPanelHeight));
-    } catch {
-      // The control still works for this session if preference storage is unavailable.
-    }
-    return;
-  }
   if (target.id !== "card-search") return;
   captureScrollPositions();
   cardSearch = target.value;

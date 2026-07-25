@@ -478,7 +478,8 @@ summary:focus-visible {
   align-items: center;
 }
 
-.map-height-control {
+.map-height-control,
+.map-width-control {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -488,17 +489,9 @@ summary:focus-visible {
   white-space: nowrap;
 }
 
-.map-height-control input {
-  width: 76px;
-  margin: 0;
-  accent-color: #d7c98e;
-}
-
-.map-height-control output {
-  min-width: 20px;
-  color: #f7f3e7;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
+.map-height-control .icon-button,
+.map-width-control .icon-button {
+  flex: 0 0 auto;
 }
 
 .icon-button--small {
@@ -1905,16 +1898,27 @@ textarea {
 
 .map-commandbar > div:first-child {
   display: grid;
+  min-width: 88px;
+  overflow: hidden;
+  writing-mode: horizontal-tb;
 }
 
 .map-commandbar > div:first-child strong {
+  overflow: hidden;
   font-family: Georgia, "Noto Serif SC", serif;
   font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: keep-all;
 }
 
 .map-commandbar > div:first-child span {
+  overflow: hidden;
   color: rgba(238, 243, 233, 0.55);
   font-size: 0.58rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: keep-all;
 }
 
 .map-commandbar .map-legend {
@@ -2617,17 +2621,10 @@ textarea {
     gap: 3px;
   }
 
-  .map-height-control {
+  .map-height-control,
+  .map-width-control {
     gap: 2px;
     font-size: 0.48rem;
-  }
-
-  .map-height-control input {
-    width: clamp(54px, 9vw, 76px);
-  }
-
-  .map-height-control output {
-    min-width: 18px;
   }
 
   .map-commandbar .icon-button {
