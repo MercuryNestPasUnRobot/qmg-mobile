@@ -55,6 +55,11 @@ manual request types is needed:
 The UI renders only that request. It can be collapsed so the player can edit the
 map, cards or score before returning to “已完成”.
 
+Changing the viewed faction or manually selected country does not destroy the
+active session. A second Bot cannot start while another Bot is waiting. The UI
+warns the player and returns focus to the existing request; after completion,
+turn advancement is calculated from that session's country.
+
 ## Randomness
 
 Bot randomness uses a single xorshift32 state stored in `GameState`. Dice,

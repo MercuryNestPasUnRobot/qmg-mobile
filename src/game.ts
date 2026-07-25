@@ -188,6 +188,33 @@ function emptyZones(): Record<CountryId, CardZones> {
   return zones;
 }
 
+const STARTING_UNITS: ReadonlyArray<{ areaId: string; unit: UnitStack }> = [
+  { areaId: "germany", unit: { countryId: "germany", kind: "army", count: 1 } },
+  { areaId: "japan", unit: { countryId: "japan", kind: "army", count: 1 } },
+  { areaId: "italy", unit: { countryId: "italy", kind: "army", count: 1 } },
+  { areaId: "united-kingdom", unit: { countryId: "united-kingdom", kind: "army", count: 1 } },
+  { areaId: "moscow", unit: { countryId: "soviet-union", kind: "army", count: 1 } },
+  { areaId: "united-states", unit: { countryId: "united-states", kind: "army", count: 1 } },
+  { areaId: "hawaii", unit: { countryId: "united-states", kind: "army", count: 1 } },
+  {
+    areaId: "western-europe",
+    unit: { countryId: "united-kingdom", kind: "army", auxiliary: "france", count: 1 },
+  },
+  {
+    areaId: "eastern-china",
+    unit: { countryId: "united-states", kind: "army", auxiliary: "china", count: 1 },
+  },
+];
+
+function initialAreas(): Record<string, AreaState> {
+  const areas = Object.fromEntries(AREAS.map((area) => [area.id, { id: area.id, units: [] }])) as Record<
+    string,
+    AreaState
+  >;
+  for (const placement of STARTING_UNITS) areas[placement.areaId]!.units.push(structuredClone(placement.unit));
+  return areas;
+}
+
 function defaultBotStrength(): BotStrengthSettings {
   return {
     inspectionWindowSize: DEFAULT_BOT_INSPECTION_WINDOW,
@@ -261,7 +288,7 @@ export function createInitialState(now = new Date(), randomUint32?: RandomUint32
       turnCountry: "germany",
       turnNumber: 1,
       phase: "开始",
-      areas: Object.fromEntries(AREAS.map((area) => [area.id, { id: area.id, units: [] }])),
+      areas: initialAreas(),
       cards,
       cardZones,
       expansionPacks: {},
@@ -420,15 +447,15 @@ export function describeAction(action: GameAction, state: GameState): string {
       return `结束${countryById(state.turnCountry).name}回合，交给${countryById(TURN_ORDER[(index + 1) % TURN_ORDER.length]!).name}`;
     }
     case "SET_CONTROLLER":
-      return `${countryById(action.countryId).name}控制方式设为${action.controller}`;
+      return `${countryById(action.countryId).name}控制方式设为${action.controller === "BOT" ? "机器人" : "玩家"}`;
     case "SET_BOT_CONFIG":
-      return `Bot Total War ${action.totalWarEnabled ? "开启" : "关闭"}`;
+      return `机器人全面战争规则${action.totalWarEnabled ? "开启" : "关闭"}`;
     case "SET_BOT_STRENGTH":
-      return `${countryById(action.countryId).name} Bot 强度：检查 ${action.inspectionWindowSize}，洗回 ${action.discardRecycleCount}`;
+      return `${countryById(action.countryId).name}机器人强度：检查 ${action.inspectionWindowSize}，洗回 ${action.discardRecycleCount}`;
     case "SET_ALL_BOT_STRENGTH":
-      return `统一 Bot 强度：检查 ${action.inspectionWindowSize}，洗回 ${action.discardRecycleCount}`;
+      return `统一机器人强度：检查 ${action.inspectionWindowSize}，洗回 ${action.discardRecycleCount}`;
     case "CLEAR_BOT_SESSION":
-      return "清除已完成的 Bot 回合";
+      return "清除已完成的机器人回合";
     case "PLACE_UNIT":
       return `${auxiliaryName(action.auxiliary) || countryById(action.countryId).name}在${areaById(action.areaId).name}放置1支${
         action.kind === "army" ? "陆军" : action.kind === "navy" ? "海军" : "空军"

@@ -119,13 +119,13 @@ function renderHeader(): string {
   const state = store.state;
   const turnCountry = countryById(state.turnCountry);
   const botSession = state.bot.session;
-  const turnLabel =
-    state.bot.controllers[state.turnCountry] === "BOT"
-      ? botSession?.isComplete
-        ? "下一回合 →"
-        : botSession
-          ? "查看 Bot"
-          : "开始 Bot"
+  const sessionCountry = botSession ? countryById(botSession.countryId) : null;
+  const turnLabel = botSession
+    ? botSession.isComplete
+      ? "下一回合 →"
+      : `继续${sessionCountry!.shortName}机器人`
+    : state.bot.controllers[state.turnCountry] === "BOT"
+      ? "开始机器人"
       : "结束回合 →";
   return `
     <header class="tactical-header">
@@ -824,10 +824,10 @@ function renderSave(): string {
       <section class="bot-strength-manager panel">
         <header>
           <div>
-            <span>SOLO BOT</span>
+            <span>单人机器人</span>
             <h3>逐国强度设置</h3>
           </div>
-          <p>修改只作用于所选 Bot，并自动保存。</p>
+          <p>修改只作用于所选机器人，并自动保存。</p>
         </header>
         ${
           botCountries.length
@@ -853,7 +853,7 @@ function renderSave(): string {
                   `;
                 })
                 .join("")
-            : '<p class="empty-state">当前没有由 Bot 控制的国家。</p>'
+            : '<p class="empty-state">当前没有由机器人控制的国家。</p>'
         }
       </section>
     </section>
@@ -914,7 +914,7 @@ function renderStartScreen(): string {
             ${COUNTRIES.map(
               (country) => `
                 <button data-action="toggle-controller" data-country-id="${country.id}" class="${state.bot.controllers[country.id] === "BOT" ? "is-bot" : ""}">
-                  <span>${country.name}</span><b>${state.bot.controllers[country.id]}</b>
+                  <span>${country.name}</span><b>${state.bot.controllers[country.id] === "BOT" ? "机器人" : "玩家"}</b>
                 </button>
               `,
             ).join("")}
@@ -923,7 +923,7 @@ function renderStartScreen(): string {
             Total War：${state.bot.config.totalWarEnabled ? "开启" : "关闭"}
           </button>
           <div class="start-strength-settings">
-            <span>统一 Bot 强度</span>
+            <span>统一机器人强度</span>
             ${renderStrengthStepper(
               "检查窗口",
               globalStrength.inspectionWindowSize,
@@ -935,7 +935,7 @@ function renderStartScreen(): string {
               "discardRecycleCount",
             )}
           </div>
-          <p>Bot 只会在你点击回合按钮后运行；完成后会停住等待下一次点击。</p>
+          <p>机器人只会在你点击回合按钮后运行；完成后会停住等待下一次点击。</p>
         </div>
         <button class="button button--primary button--wide" data-action="enter-game">进入战局</button>
       </section>
@@ -970,8 +970,14 @@ const BOT_ANSWER_LABELS: Record<string, string> = {
   INEFFECTIVE: "无效，继续搜索",
   COMPLETED: "已完成",
   CANNOT_EXECUTE: "无法执行，改判无效",
-  BUILD_ARMY: "Build Army",
-  BUILD_NAVY: "Build Navy",
+  BUILD_ARMY: "建造陆军",
+  BUILD_NAVY: "建造海军",
+};
+
+const BOT_MODE_LABELS: Record<string, string> = {
+  EXPANSION: "扩张回合",
+  AGGRESSIVE: "进攻回合",
+  DEFENSIVE: "防御回合",
 };
 
 function renderBotPanel(): string {
@@ -982,8 +988,8 @@ function renderBotPanel(): string {
   return `
     <aside class="bot-turn-panel" aria-live="polite">
       <header>
-        <div><span>SOLO BOT · R${session.roundNumber}</span><strong>${countryById(session.countryId).name} ${session.turnMode ?? "判断回合模式"}</strong></div>
-        <button data-action="collapse-bot-panel" aria-label="收起 Bot 面板">—</button>
+        <div><span>单人机器人 · 第 ${session.roundNumber} 轮</span><strong>${countryById(session.countryId).name} ${session.turnMode ? BOT_MODE_LABELS[session.turnMode] : "判断回合模式"}</strong></div>
+        <button data-action="collapse-bot-panel" aria-label="收起机器人面板">—</button>
       </header>
       ${
         manualRequest
@@ -994,10 +1000,10 @@ function renderBotPanel(): string {
               ${manualRequest.answers.map((answer) => `<button data-action="answer-bot" data-answer="${answer}">${BOT_ANSWER_LABELS[answer] ?? answer}</button>`).join("")}
             </div>
           `
-          : `<p>${session.isComplete ? "该国 Bot 回合已完成。你仍可手动调整局面；点击顶部“下一回合”后才会进入下一个国家。" : "Bot 正在处理自动步骤。"}</p>`
+          : `<p>${session.isComplete ? "该国机器人回合已完成。你仍可手动调整局面；点击顶部“下一回合”后才会进入下一个国家。" : "机器人正在处理自动步骤。"}</p>`
       }
       <details>
-        <summary>Bot Turn Log · ${session.log.length}</summary>
+        <summary>机器人回合日志 · ${session.log.length}</summary>
         <ol>${session.log.map((entry) => `<li>${escapeHtml(entry)}</li>`).join("")}</ol>
       </details>
     </aside>
@@ -1015,7 +1021,7 @@ function render(): void {
       <main class="content">${renderCurrentView()}</main>
       ${renderNavigation()}
       ${renderBotPanel()}
-      ${botPanelCollapsed && store.state.bot.session ? '<button class="bot-panel-reopen" data-action="reopen-bot-panel">BOT 待处理</button>' : ""}
+      ${botPanelCollapsed && store.state.bot.session ? '<button class="bot-panel-reopen" data-action="reopen-bot-panel">机器人待处理</button>' : ""}
       ${toastMessage ? `<div class="toast" role="status">${escapeHtml(toastMessage)}</div>` : ""}
     </div>
   `;
@@ -1143,7 +1149,7 @@ app.addEventListener("click", (event) => {
       botPanelCollapsed = false;
       render();
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Bot 无法继续");
+      showToast(error instanceof Error ? error.message : "机器人无法继续");
     }
     return;
   }
@@ -1191,7 +1197,13 @@ app.addEventListener("click", (event) => {
     const session = store.state.bot.session;
     if (session && !session.isComplete) {
       botPanelCollapsed = false;
-      render();
+      const waitingCountry = countryById(session.countryId).name;
+      const selectedCountry = countryById(store.state.turnCountry).name;
+      showToast(
+        session.countryId === store.state.turnCountry
+          ? `${waitingCountry}机器人仍在待机，请先完成当前流程`
+          : `${waitingCountry}机器人仍在待机，不能开始${selectedCountry}的回合`,
+      );
       return;
     }
     if (store.state.bot.controllers[store.state.turnCountry] === "BOT" && !session) {
@@ -1200,7 +1212,12 @@ app.addEventListener("click", (event) => {
       render();
       return;
     }
-    if (session?.isComplete) store.execute({ type: "CLEAR_BOT_SESSION" });
+    if (session?.isComplete) {
+      if (store.state.turnCountry !== session.countryId) {
+        store.execute({ type: "SET_TURN_COUNTRY", countryId: session.countryId });
+      }
+      store.execute({ type: "CLEAR_BOT_SESSION" });
+    }
     const currentIndex = TURN_ORDER.indexOf(store.state.turnCountry);
     const nextCountry = TURN_ORDER[(currentIndex + 1) % TURN_ORDER.length]!;
     store.execute({ type: "END_TURN" });
@@ -1496,14 +1513,18 @@ app.addEventListener("change", (event) => {
   if (target.id === "turn-country") {
     const countryId = target.value as CountryId;
     const faction = countryById(countryId).faction;
-    if (store.state.bot.session) store.execute({ type: "CLEAR_BOT_SESSION" });
+    const waitingSession = store.state.bot.session;
     store.execute({ type: "SET_TURN_COUNTRY", countryId });
     if (faction !== store.state.activeFaction) store.execute({ type: "SWITCH_FACTION", faction });
     handCountryId = countryId;
     unitCountryId = countryId;
     selectedCardId = null;
     cardPanelMode = null;
-    showToast(`现在是${countryById(countryId).name}回合`);
+    showToast(
+      waitingSession && !waitingSession.isComplete && waitingSession.countryId !== countryId
+        ? `${countryById(waitingSession.countryId).name}机器人保持待机；现在可手动操作${countryById(countryId).name}`
+        : `现在是${countryById(countryId).name}回合`,
+    );
     return;
   }
   if (target.id === "import-file" && target instanceof HTMLInputElement && target.files?.[0]) {

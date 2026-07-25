@@ -245,6 +245,22 @@ describe("solo bot domain engine", () => {
     expect(restored.state.bot.session?.isComplete).toBe(false);
   });
 
+  it("keeps one bot waiting while the player changes faction or country", () => {
+    const store = new GameStore(new MemoryStorage());
+    store.execute({ type: "SET_CONTROLLER", countryId: "germany", controller: "BOT" });
+    store.execute({ type: "SET_CONTROLLER", countryId: "japan", controller: "BOT" });
+    expect(store.startCurrentBotTurn()).toBe(true);
+    const requestId = store.state.bot.session?.pendingManualRequest?.id;
+
+    store.execute({ type: "SWITCH_FACTION", faction: "allies" });
+    store.execute({ type: "SET_TURN_COUNTRY", countryId: "japan" });
+
+    expect(store.state.bot.session?.countryId).toBe("germany");
+    expect(store.state.bot.session?.pendingManualRequest?.id).toBe(requestId);
+    expect(store.startCurrentBotTurn()).toBe(false);
+    expect(store.state.bot.session?.countryId).toBe("germany");
+  });
+
   it("discards five cards and creates two manual operations when home liberation succeeds", () => {
     let state = createInitialState();
     state.bot.controllers.germany = "BOT";

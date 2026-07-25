@@ -117,14 +117,21 @@ function cardMatches(task: BotTaskType, card: Card): boolean {
 }
 
 function taskLabel(type: BotTaskType): string {
-  if (type === "SEARCH_EFFECTIVE_BUILD") return "Build";
-  if (type === "SEARCH_EFFECTIVE_BATTLE") return "Land/Sea Battle";
-  if (type === "SEARCH_EFFECTIVE_ECONOMIC_ATTACK") return "Economic Attack";
-  if (type === "SEARCH_EFFECTIVE_EVENT") return "Event";
-  if (type === "SEARCH_EFFECTIVE_STATUS_OR_RESPONSE") return "Status/Response";
-  if (type === "SEARCH_EFFECTIVE_AIR_FORCE") return "Air Force";
-  return "Bolster";
+  if (type === "SEARCH_EFFECTIVE_BUILD") return "建造";
+  if (type === "SEARCH_EFFECTIVE_BATTLE") return "陆战或海战";
+  if (type === "SEARCH_EFFECTIVE_ECONOMIC_ATTACK") return "经济战";
+  if (type === "SEARCH_EFFECTIVE_EVENT") return "事件";
+  if (type === "SEARCH_EFFECTIVE_STATUS_OR_RESPONSE") return "持续或响应";
+  if (type === "SEARCH_EFFECTIVE_AIR_FORCE") return "空中力量";
+  return "增强";
 }
+
+const RESPONSE_EVENT_NAMES: Record<BotDomainEvent["type"], string> = {
+  BotBuiltPiece: "机器人建造部队",
+  BotCompletedAttack: "机器人完成攻击",
+  BotPieceWouldBeRemoved: "机器人部队将被移除",
+  EnemyBuiltAdjacentToBot: "敌军在机器人邻接区域建造",
+};
 
 function finishTask(session: BotTurnSession): void {
   const task = session.taskQueue[session.currentTaskIndex];
@@ -186,7 +193,7 @@ function startModeDecision(state: GameState): GameState {
   request(
     session,
     "BOARD_QUESTION",
-    `是否存在一个空的 Supply Space 或 Home Space，与${countryById(session.countryId).name}的一枚有补给部队相邻？`,
+    `是否存在一个空的补给区域或本土区域，与${countryById(session.countryId).name}的一枚有补给部队相邻？`,
     ["YES", "NO"],
     "MODE_EXPANSION",
   );
@@ -196,7 +203,7 @@ function startModeDecision(state: GameState): GameState {
 export function startBotTurn(state: GameState): GameState {
   const countryId = state.turnCountry;
   if (state.bot.controllers[countryId] !== "BOT") return state;
-  if (state.bot.session && !state.bot.session.isComplete) return state;
+  if (state.bot.session) return state;
   const next = clone(state);
   next.bot.session = {
     countryId,
@@ -211,7 +218,7 @@ export function startBotTurn(state: GameState): GameState {
     decisionStep: 0,
     decisionHistory: [],
     randomEvents: [],
-    log: [`${countryById(countryId).name} Bot 回合开始`],
+    log: [`${countryById(countryId).name}机器人回合开始`],
     nextTaskId: 1,
     nextRequestId: 1,
     isComplete: false,
@@ -226,20 +233,20 @@ export function startBotTurn(state: GameState): GameState {
     const die = rollD6(next.bot.rngState);
     next.bot.rngState = die.state;
     next.bot.session.randomEvents.push({ kind: "DIE", result: die.value, reason: "本土解放" });
-    next.bot.session.log.push(`本土被占领；自动掷 D6：${die.value}`);
+    next.bot.session.log.push(`本土被占领；自动掷六面骰：${die.value}`);
     if (die.value >= 4) {
       for (let count = 0; count < 5; count += 1) discardTop(next, countryId, "本土解放");
       request(
         next.bot.session,
         "MANUAL_OPERATION",
-        `请移除占领${countryById(countryId).name} Home Space 的敌军。`,
+        `请移除占领${countryById(countryId).name}本土区域的敌军。`,
         ["COMPLETED"],
         "HOME_REMOVE_OCCUPIER",
       );
       return next;
     }
     next.victoryPoints[countryById(countryId).faction] += 1;
-    next.bot.session.log.push("本土继续被占领；Bot 获得 1 VP");
+    next.bot.session.log.push("本土继续被占领；机器人获得 1 胜利点");
   }
   return startModeDecision(next);
 }
@@ -253,7 +260,12 @@ function chooseMode(state: GameState, mode: BotTurnMode): GameState {
   session.taskQueue = buildTaskQueue(mode, session.roundNumber, next.bot.config.totalWarEnabled);
   session.nextTaskId = session.taskQueue.length + 1;
   session.currentTaskIndex = 0;
-  session.log.push(`Turn Mode：${mode}；建立 ${session.taskQueue.length} 项有限任务队列`);
+  const modeName: Record<BotTurnMode, string> = {
+    EXPANSION: "扩张回合",
+    AGGRESSIVE: "进攻回合",
+    DEFENSIVE: "防御回合",
+  };
+  session.log.push(`回合模式：${modeName[mode]}；建立 ${session.taskQueue.length} 项有限任务队列`);
   return runBotUntilPause(next);
 }
 
@@ -269,7 +281,7 @@ function continueModeDecision(state: GameState, continuation: string, answer: Bo
     request(
       session,
       "BOARD_QUESTION",
-      `是否存在一枚有补给的敌方部队，与${countryById(session.countryId).name} Home Space 相邻？`,
+      `是否存在一枚有补给的敌方部队，与${countryById(session.countryId).name}本土区域相邻？`,
       ["YES", "NO"],
       "MODE_HOME_THREAT",
     );
@@ -280,13 +292,13 @@ function continueModeDecision(state: GameState, continuation: string, answer: Bo
     if (deployed < 3) return chooseMode(next, "DEFENSIVE");
     const die = rollD6(next.bot.rngState);
     next.bot.rngState = die.state;
-    session.randomEvents.push({ kind: "DIE", result: die.value, reason: "Defensive Turn 判断" });
-    session.log.push(`自动掷 D6：${die.value}（Defensive Turn 判断）`);
+    session.randomEvents.push({ kind: "DIE", result: die.value, reason: "防御回合判断" });
+    session.log.push(`自动掷六面骰：${die.value}（防御回合判断）`);
     if (die.value >= 5) return chooseMode(next, "DEFENSIVE");
     request(
       session,
       "BOARD_QUESTION",
-      `${countryById(session.countryId).name}是否有部队邻接敌方控制、可得分的 Supply Space 或 Home Space？`,
+      `${countryById(session.countryId).name}是否有部队邻接敌方控制、可得分的补给区域或本土区域？`,
       ["YES", "NO"],
       "MODE_AGGRESSIVE",
     );
@@ -297,7 +309,7 @@ function continueModeDecision(state: GameState, continuation: string, answer: Bo
     request(
       session,
       "BOARD_QUESTION",
-      `是否存在一条可用路径，通向敌方控制的 Supply Space 或 Home Space？`,
+      `是否存在一条可用路径，通向敌方控制的补给区域或本土区域？`,
       ["YES", "NO"],
       "MODE_PATH",
     );
@@ -345,7 +357,7 @@ function cleanup(state: GameState): void {
   finishTask(session);
   session.phase = "COMPLETE";
   session.isComplete = true;
-  session.log.push(`${countryById(session.countryId).name} Bot 回合完成；等待玩家点击下一回合`);
+  session.log.push(`${countryById(session.countryId).name}机器人回合完成；等待玩家点击下一回合`);
 }
 
 export function runBotUntilPause(state: GameState): GameState {
@@ -364,13 +376,13 @@ export function runBotUntilPause(state: GameState): GameState {
     }
     if (task.type === "TOTAL_WAR_DISCARD") {
       if (next.bot.config.totalWarDiscardMode === "TOP_CARD" || zones.deck.length < 2) {
-        discardTop(next, session.countryId, "Total War 弃牌");
+        discardTop(next, session.countryId, "全面战争规则弃牌");
       } else if (zones.deck.length) {
         const step = nextInt(next.bot.rngState, zones.deck.length);
         next.bot.rngState = step.state;
         const [cardId] = zones.deck.splice(step.value, 1);
         if (cardId) zones.discard.push(cardId);
-        session.log.push(`Total War 随机弃掉「${next.cards[cardId!]?.name ?? cardId}」`);
+        session.log.push(`全面战争规则随机弃掉「${next.cards[cardId!]?.name ?? cardId}」`);
       }
       finishTask(session);
       continue;
@@ -401,7 +413,7 @@ export function runBotUntilPause(state: GameState): GameState {
     request(
       session,
       "EFFECTIVE_CHECK",
-      `${countryById(session.countryId).name}找到「${card.name}」（${taskLabel(task.type)}）。这张牌能否产生对 Bot 有利的有效结果？`,
+      `${countryById(session.countryId).name}找到「${card.name}」（${taskLabel(task.type)}）。这张牌能否产生对机器人有利的有效结果？`,
       ["EFFECTIVE", "INEFFECTIVE"],
       "EFFECTIVE_CARD",
       candidate,
@@ -429,7 +441,7 @@ function acceptEffectiveCard(state: GameState, cardId: string): GameState {
     zones.resolution.pop();
     (card.type === "status" ? zones.status : zones.response).push(cardId);
     session.pendingCardId = null;
-    session.log.push(`部署「${card.name}」至${card.type === "status" ? "正面 Status" : "背面 Response"}栏`);
+    session.log.push(`部署「${card.name}」至${card.type === "status" ? "正面持续" : "背面响应"}栏`);
     finishTask(session);
     session.phase = "RUNNING";
     return runBotUntilPause(next);
@@ -439,7 +451,7 @@ function acceptEffectiveCard(state: GameState, cardId: string): GameState {
     request(
       session,
       "MANUAL_OPERATION",
-      `${countryById(session.countryId).name}执行 Build。请选择 Build Army 或 Build Navy。`,
+      `${countryById(session.countryId).name}执行建造。请选择建造陆军或建造海军。`,
       ["BUILD_ARMY", "BUILD_NAVY", "CANNOT_EXECUTE"],
       "CHOOSE_BUILD",
       cardId,
@@ -447,7 +459,7 @@ function acceptEffectiveCard(state: GameState, cardId: string): GameState {
   } else {
     const operationPrompt =
       task.type === "SEARCH_EFFECTIVE_AIR_FORCE"
-        ? `请按优先级部署空军：受威胁的 Home Space → 受威胁的受控 Supply Space → 邻接敌方空军 → 获取 Air Superiority。`
+        ? `请按优先级部署空军：受威胁的本土区域 → 受威胁的受控补给区域 → 邻接敌方空军 → 取得制空权。`
         : `请执行「${card.name}」的合法操作，完成后确认。`;
     request(
       session,
@@ -464,7 +476,7 @@ function acceptEffectiveCard(state: GameState, cardId: string): GameState {
 export function answerBotRequest(state: GameState, answer: BotAnswer): GameState {
   const session = state.bot.session;
   const current = session?.pendingManualRequest;
-  if (!session || !current) throw new Error("当前没有等待回答的 Bot 请求");
+  if (!session || !current) throw new Error("当前没有等待回答的机器人请求");
   if (!current.answers.includes(answer)) throw new Error("该回答不适用于当前请求");
 
   if (current.continuation.startsWith("MODE_")) return continueModeDecision(state, current.continuation, answer);
@@ -474,7 +486,7 @@ export function answerBotRequest(state: GameState, answer: BotAnswer): GameState
     request(
       nextSession,
       "MANUAL_OPERATION",
-      `请在${countryById(nextSession.countryId).name} Home Space 放置一支 Bot Army。`,
+      `请在${countryById(nextSession.countryId).name}本土区域放置一支机器人陆军。`,
       ["COMPLETED"],
       "HOME_BUILD_ARMY",
     );
@@ -491,7 +503,7 @@ export function answerBotRequest(state: GameState, answer: BotAnswer): GameState
     const next = clone(state);
     next.bot.session!.pendingManualRequest = null;
     next.bot.session!.phase = next.bot.session!.isComplete ? "COMPLETE" : "RUNNING";
-    next.bot.session!.log.push("玩家完成 Response 实体操作");
+    next.bot.session!.log.push("玩家完成响应牌实体操作");
     return next.bot.session!.isComplete ? next : runBotUntilPause(next);
   }
   if (current.continuation === "EFFECTIVE_CARD") {
@@ -580,8 +592,12 @@ export function resolveBotResponseEvent(
   const die = rollD6(next.bot.rngState);
   next.bot.rngState = die.state;
   const session = next.bot.session;
-  session?.randomEvents.push({ kind: "DIE", result: die.value, reason: `Response：${event.type}` });
-  session?.log.push(`检查 Response「${next.cards[responseCardId]?.name ?? responseCardId}」：D6=${die.value}`);
+  session?.randomEvents.push({
+    kind: "DIE",
+    result: die.value,
+    reason: `响应牌：${RESPONSE_EVENT_NAMES[event.type]}`,
+  });
+  session?.log.push(`检查响应牌「${next.cards[responseCardId]?.name ?? responseCardId}」：六面骰=${die.value}`);
   if (die.value <= 3) {
     return {
       state: next,
@@ -599,13 +615,13 @@ export function resolveBotResponseEvent(
   zones.response.shift();
   zones.discard.push(responseCardId);
   const instructions: Record<BotDomainEvent["type"], string> = {
-    BotBuiltPiece: `${countryById(event.countryId).name}的 Response 已触发：请执行一次额外 Build。`,
-    BotCompletedAttack: `${countryById(event.countryId).name}的 Response 已触发：请执行一次额外 Attack。`,
-    BotPieceWouldBeRemoved: `${countryById(event.countryId).name}的 Response 已触发：请保留刚刚将被移除的 Bot 部队。`,
-    EnemyBuiltAdjacentToBot: `${countryById(event.countryId).name}的 Response 已触发：请移除敌方刚刚建立的部队。`,
+    BotBuiltPiece: `${countryById(event.countryId).name}的响应牌已触发：请执行一次额外建造。`,
+    BotCompletedAttack: `${countryById(event.countryId).name}的响应牌已触发：请执行一次额外攻击。`,
+    BotPieceWouldBeRemoved: `${countryById(event.countryId).name}的响应牌已触发：请保留刚刚将被移除的机器人部队。`,
+    EnemyBuiltAdjacentToBot: `${countryById(event.countryId).name}的响应牌已触发：请移除敌方刚刚建立的部队。`,
   };
   const manualInstruction = instructions[event.type];
-  session?.log.push(`Response 触发并进入弃牌堆：${manualInstruction}`);
+  session?.log.push(`响应牌触发并进入弃牌堆：${manualInstruction}`);
   if (session && !session.pendingManualRequest) {
     request(session, "MANUAL_OPERATION", manualInstruction, ["COMPLETED"], "RESPONSE_EFFECT", responseCardId);
   }

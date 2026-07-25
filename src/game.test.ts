@@ -23,6 +23,29 @@ function seededRandom(seed: number): () => number {
 }
 
 describe("prototype game state", () => {
+  it("creates the requested starting armies in every home and auxiliary space", () => {
+    const state = createInitialState();
+    const expected = [
+      ["germany", "germany", undefined],
+      ["japan", "japan", undefined],
+      ["italy", "italy", undefined],
+      ["united-kingdom", "united-kingdom", undefined],
+      ["moscow", "soviet-union", undefined],
+      ["united-states", "united-states", undefined],
+      ["hawaii", "united-states", undefined],
+      ["western-europe", "united-kingdom", "france"],
+      ["eastern-china", "united-states", "china"],
+    ] as const;
+    for (const [areaId, countryId, auxiliary] of expected) {
+      expect(state.areas[areaId]?.units).toContainEqual({
+        countryId,
+        kind: "army",
+        auxiliary,
+        count: 1,
+      });
+    }
+  });
+
   it("keeps exactly three country hands visible per faction", () => {
     expect(countriesForFaction("axis").map((country) => country.id)).toEqual(["germany", "japan", "italy"]);
     expect(countriesForFaction("allies").map((country) => country.id)).toEqual([
@@ -34,6 +57,7 @@ describe("prototype game state", () => {
 
   it("places and removes a unit without requiring a move workflow", () => {
     let state = createInitialState();
+    state.areas["western-europe"]!.units = [];
     state = reduceGame(state, {
       type: "PLACE_UNIT",
       areaId: "western-europe",
@@ -53,6 +77,8 @@ describe("prototype game state", () => {
 
   it("keeps Chinese and French auxiliary units separate from their parent countries", () => {
     let state = createInitialState();
+    state.areas["eastern-china"]!.units = [];
+    state.areas["western-europe"]!.units = [];
     state = reduceGame(state, {
       type: "PLACE_UNIT",
       areaId: "eastern-china",
@@ -306,14 +332,25 @@ describe("prototype game state", () => {
       countryId: "germany",
       kind: "air-force",
     });
-    expect(state.areas.germany?.units[0]).toMatchObject({ countryId: "germany", kind: "air-force", count: 1 });
+    expect(state.areas.germany?.units).toContainEqual({
+      countryId: "germany",
+      kind: "air-force",
+      count: 1,
+    });
     state = reduceGame(state, {
       type: "REMOVE_UNIT",
       areaId: "germany",
       countryId: "germany",
       kind: "air-force",
     });
-    expect(state.areas.germany?.units).toHaveLength(0);
+    expect(state.areas.germany?.units).not.toContainEqual(
+      expect.objectContaining({ countryId: "germany", kind: "air-force" }),
+    );
+    expect(state.areas.germany?.units).toContainEqual({
+      countryId: "germany",
+      kind: "army",
+      count: 1,
+    });
   });
 
   it("preserves deck order while drawing, finding, discarding, recovering, and shuffling", () => {

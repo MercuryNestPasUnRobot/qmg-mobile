@@ -13,7 +13,7 @@ import {
   type GameState,
   type RandomUint32,
 } from "./game";
-import { COUNTRIES, type CountryId } from "./prototype-data";
+import { COUNTRIES, countryById, type CountryId } from "./prototype-data";
 import { answerBotRequest, startBotTurn } from "./bot/engine";
 import type { BotAnswer } from "./bot/types";
 
@@ -197,7 +197,10 @@ export class GameStore {
   startCurrentBotTurn(): boolean {
     const next = startBotTurn(this.state);
     if (next === this.state) return false;
-    this.history.push({ state: this.state, description: `开始 ${this.state.turnCountry} Bot 回合` });
+    this.history.push({
+      state: this.state,
+      description: `开始 ${countryById(this.state.turnCountry).name}机器人回合`,
+    });
     if (this.history.length > MAX_UNDO) this.history.shift();
     this.state = next;
     this.persist();
@@ -205,7 +208,7 @@ export class GameStore {
   }
 
   answerCurrentBotRequest(answer: BotAnswer): void {
-    const prompt = this.state.bot.session?.pendingManualRequest?.prompt ?? "Bot 请求";
+    const prompt = this.state.bot.session?.pendingManualRequest?.prompt ?? "机器人请求";
     const next = answerBotRequest(this.state, answer);
     this.history.push({ state: this.state, description: prompt });
     if (this.history.length > MAX_UNDO) this.history.shift();
