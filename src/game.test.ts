@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { canMoveUnit, createInitialState, normalizeGameState, reduceGame } from "./game";
 import { CARD_CATALOG } from "./generated-card-catalog";
 import { AREAS, MAP_CONNECTIONS, areaById, connectionBetween, countriesForFaction } from "./prototype-data";
-import { GameStore, parseImportedSave, type StorageLike } from "./store";
+import { GameStore, parseExpansionPack, parseImportedSave, type StorageLike } from "./store";
 
 class MemoryStorage implements StorageLike {
   private values = new Map<string, string>();
@@ -306,5 +306,39 @@ describe("save, restore, import and undo", () => {
     expect(Object.values(imported.cards).find((card) => card.name === "测试牌")?.description).toBe("由玩家手动执行");
     expect(imported.log.at(-1)?.message).not.toContain("测试牌");
     expect(() => parseImportedSave('{"hello":"world"}')).toThrow("兼容");
+  });
+
+  it("exports, imports, preserves, and removes expansion packs as a unit", () => {
+    const source = new GameStore();
+    source.execute({
+      type: "ADD_CUSTOM_CARD",
+      countryId: "germany",
+      name: "拓展测试牌",
+      description: "整体管理",
+      cardType: "status",
+      destination: "deck",
+    });
+    const exported = source.exportExpansionPack("local-custom");
+    const parsed = parseExpansionPack(exported);
+    expect(parsed.name).toBe("本机自定义牌");
+    expect(parsed.cards).toHaveLength(1);
+
+    const target = new GameStore();
+    const packId = target.importExpansionPack(exported);
+    expect(target.state.expansionPacks[packId]?.cardIds).toHaveLength(1);
+    expect(Object.values(target.state.cards).some((card) => card.name === "拓展测试牌")).toBe(true);
+
+    target.newGame();
+    expect(target.state.expansionPacks[packId]?.cardIds).toHaveLength(1);
+    target.execute({ type: "REMOVE_EXPANSION_PACK", packId });
+    expect(target.state.expansionPacks[packId]).toBeUndefined();
+    expect(Object.values(target.state.cards).some((card) => card.name === "拓展测试牌")).toBe(false);
+  });
+
+  it("rejects malformed expansion packs", () => {
+    expect(() => parseExpansionPack('{"format":"qmg-mobile-expansion","version":1,"name":"空包","cards":[]}')).toThrow(
+      "兼容",
+    );
+    expect(() => parseExpansionPack('{"hello":"world"}')).toThrow("兼容");
   });
 });

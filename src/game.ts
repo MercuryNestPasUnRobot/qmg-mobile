@@ -50,6 +50,23 @@ export interface Card {
   image?: string;
   sourceId?: number;
   isCustom: boolean;
+  expansionPackId?: string;
+  expansionDestination?: "hand" | "deck";
+}
+
+export interface ExpansionCardDefinition {
+  countryId: CountryId;
+  name: string;
+  description: string;
+  cardType: CardType;
+  destination: "hand" | "deck";
+}
+
+export interface ExpansionPack {
+  id: string;
+  name: string;
+  cardIds: string[];
+  createdAt: string;
 }
 
 export interface CardZones {
@@ -75,6 +92,7 @@ export interface GameState {
   areas: Record<string, AreaState>;
   cards: Record<string, Card>;
   cardZones: Record<CountryId, CardZones>;
+  expansionPacks: Record<string, ExpansionPack>;
   victoryPoints: Record<Faction, number>;
   log: LogEntry[];
   nextLogId: number;
@@ -108,6 +126,13 @@ export type GameAction =
       cardType: CardType;
       destination: "hand" | "deck";
     }
+  | {
+      type: "IMPORT_EXPANSION_PACK";
+      packId: string;
+      name: string;
+      cards: ExpansionCardDefinition[];
+    }
+  | { type: "REMOVE_EXPANSION_PACK"; packId: string }
   | { type: "ADJUST_VP"; faction: Faction; amount: number }
   | { type: "SET_VP"; faction: Faction; value: number };
 
@@ -148,6 +173,7 @@ export function createInitialState(now = new Date()): GameState {
     areas: Object.fromEntries(AREAS.map((area) => [area.id, { id: area.id, units: [] }])),
     cards,
     cardZones,
+    expansionPacks: {},
     victoryPoints: { axis: 0, allies: 0 },
     log: [{ id: 1, at: timestamp, message: "新战局已创建" }],
     nextLogId: 2,
@@ -248,6 +274,10 @@ export function describeAction(action: GameAction, state: GameState): string {
       return `${countryById(action.countryId).name}将「${state.cards[action.cardId]?.name ?? "未知卡牌"}」收回手牌`;
     case "ADD_CUSTOM_CARD":
       return `${countryById(action.countryId).name}添加1张自定义卡牌到${action.destination === "hand" ? "手牌" : "牌堆"}`;
+    case "IMPORT_EXPANSION_PACK":
+      return `加入拓展包「${action.name}」（${action.cards.length}张牌）`;
+    case "REMOVE_EXPANSION_PACK":
+      return `移除拓展包「${state.expansionPacks[action.packId]?.name ?? "未知拓展包"}」`;
     case "ADJUST_VP":
       return `${action.faction === "axis" ? "轴心国" : "同盟国"}胜利点${action.amount >= 0 ? "+" : ""}${action.amount}`;
     case "SET_VP":
@@ -417,8 +447,69 @@ export function reduceGame(state: GameState, action: GameAction, now = new Date(
         type: action.cardType,
         edition: "custom",
         isCustom: true,
+        expansionPackId: "local-custom",
+        expansionDestination: action.destination,
       };
       zones[action.destination].push(id);
+      const localPack =
+        next.expansionPacks["local-custom"] ??
+        (next.expansionPacks["local-custom"] = {
+          id: "local-custom",
+          name: "本机自定义牌",
+          cardIds: [],
+          createdAt: now.toISOString(),
+        });
+      localPack.cardIds.push(id);
+      break;
+    }
+    case "IMPORT_EXPANSION_PACK": {
+      const name = action.name.trim();
+      if (!name) throw new Error("拓展包名称不能为空");
+      if (!action.cards.length) throw new Error("拓展包中没有卡牌");
+      if (next.expansionPacks[action.packId]) throw new Error("拓展包编号已存在");
+      const pack: ExpansionPack = {
+        id: action.packId,
+        name,
+        cardIds: [],
+        createdAt: now.toISOString(),
+      };
+      for (const definition of action.cards) {
+        countryById(definition.countryId);
+        const cardName = definition.name.trim();
+        if (!cardName) throw new Error("拓展包中存在无名称卡牌");
+        const id = `custom-${next.nextCustomCardId}`;
+        next.nextCustomCardId += 1;
+        next.cards[id] = {
+          id,
+          countryId: definition.countryId,
+          name: cardName,
+          description: definition.description.trim() || "自定义卡牌，效果由玩家手动处理。",
+          type: definition.cardType,
+          edition: "custom",
+          isCustom: true,
+          expansionPackId: action.packId,
+          expansionDestination: definition.destination,
+        };
+        next.cardZones[definition.countryId][definition.destination].push(id);
+        pack.cardIds.push(id);
+      }
+      next.expansionPacks[action.packId] = pack;
+      break;
+    }
+    case "REMOVE_EXPANSION_PACK": {
+      const pack = next.expansionPacks[action.packId];
+      if (!pack) throw new Error("找不到该拓展包");
+      const removing = new Set(pack.cardIds);
+      for (const country of COUNTRIES) {
+        const zones = next.cardZones[country.id];
+        zones.deck = zones.deck.filter((id) => !removing.has(id));
+        zones.hand = zones.hand.filter((id) => !removing.has(id));
+        zones.discard = zones.discard.filter((id) => !removing.has(id));
+        zones.status = zones.status.filter((id) => !removing.has(id));
+        zones.response = zones.response.filter((id) => !removing.has(id));
+      }
+      for (const id of removing) delete next.cards[id];
+      delete next.expansionPacks[action.packId];
       break;
     }
     case "ADJUST_VP":
@@ -459,6 +550,7 @@ function mergeAreaUnits(target: AreaState, source: AreaState): void {
 }
 
 function normalizeCards(state: GameState): void {
+  state.expansionPacks = state.expansionPacks ?? {};
   for (const country of COUNTRIES) {
     const zones = state.cardZones[country.id];
     zones.status = Array.isArray(zones.status) ? zones.status : [];
@@ -503,6 +595,37 @@ function normalizeCards(state: GameState): void {
   for (const card of Object.values(state.cards)) {
     if (!card.description) card.description = "自定义卡牌，效果由玩家手动处理。";
     if (!card.edition) card.edition = card.isCustom ? "custom" : "base";
+    if (card.isCustom && !card.expansionPackId) card.expansionPackId = "local-custom";
+    if (card.isCustom && !card.expansionDestination) {
+      card.expansionDestination = state.cardZones[card.countryId].hand.includes(card.id) ? "hand" : "deck";
+    }
+  }
+
+  const customCards = Object.values(state.cards).filter((card) => card.isCustom);
+  if (customCards.some((card) => card.expansionPackId === "local-custom") && !state.expansionPacks["local-custom"]) {
+    state.expansionPacks["local-custom"] = {
+      id: "local-custom",
+      name: "本机自定义牌",
+      cardIds: [],
+      createdAt: state.updatedAt,
+    };
+  }
+  for (const pack of Object.values(state.expansionPacks)) {
+    pack.cardIds = customCards
+      .filter((card) => card.expansionPackId === pack.id)
+      .map((card) => card.id);
+  }
+  for (const card of customCards) {
+    const packId = card.expansionPackId!;
+    const pack =
+      state.expansionPacks[packId] ??
+      (state.expansionPacks[packId] = {
+        id: packId,
+        name: "已导入拓展包",
+        cardIds: [],
+        createdAt: state.updatedAt,
+      });
+    if (!pack.cardIds.includes(card.id)) pack.cardIds.push(card.id);
   }
 }
 

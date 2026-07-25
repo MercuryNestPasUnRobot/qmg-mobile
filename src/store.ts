@@ -6,9 +6,12 @@ import {
   normalizeGameState,
   reduceGame,
   SAVE_VERSION,
+  type CardType,
+  type ExpansionCardDefinition,
   type GameAction,
   type GameState,
 } from "./game";
+import { COUNTRIES, type CountryId } from "./prototype-data";
 
 const STORAGE_KEY = "qmg-mobile.prototype.save.v1";
 const MAX_UNDO = 50;
@@ -31,6 +34,30 @@ interface ExportedSave {
   exportedAt: string;
   state: GameState;
 }
+
+interface ExpansionPackFile {
+  format: "qmg-mobile-expansion";
+  version: 1;
+  name: string;
+  exportedAt: string;
+  cards: ExpansionCardDefinition[];
+}
+
+const CARD_TYPES = new Set<CardType>([
+  "build",
+  "build-army",
+  "build-navy",
+  "land-battle",
+  "sea-battle",
+  "economic",
+  "event",
+  "response",
+  "status",
+  "air-power",
+  "bolster",
+  "other",
+]);
+const COUNTRY_IDS = new Set(COUNTRIES.map((country) => country.id));
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -61,6 +88,48 @@ export function parseImportedSave(text: string): GameState {
     return normalizeGameState((parsed as ExportedSave).state);
   }
   throw new Error("这不是兼容的 QMG Mobile 存档");
+}
+
+export function parseExpansionPack(text: string): Pick<ExpansionPackFile, "name" | "cards"> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("拓展包 JSON 格式无效");
+  }
+  if (!parsed || typeof parsed !== "object") throw new Error("这不是兼容的 QMG 拓展包");
+  const candidate = parsed as Partial<ExpansionPackFile>;
+  if (
+    candidate.format !== "qmg-mobile-expansion" ||
+    candidate.version !== 1 ||
+    typeof candidate.name !== "string" ||
+    !candidate.name.trim() ||
+    !Array.isArray(candidate.cards) ||
+    !candidate.cards.length
+  ) {
+    throw new Error("这不是兼容的 QMG 拓展包");
+  }
+  const cards = candidate.cards.map((value) => {
+    const card = value as Partial<ExpansionCardDefinition>;
+    if (
+      !COUNTRY_IDS.has(card.countryId as CountryId) ||
+      typeof card.name !== "string" ||
+      !card.name.trim() ||
+      typeof card.description !== "string" ||
+      !CARD_TYPES.has(card.cardType as CardType) ||
+      (card.destination !== "hand" && card.destination !== "deck")
+    ) {
+      throw new Error("拓展包中包含无效卡牌");
+    }
+    return {
+      countryId: card.countryId as CountryId,
+      name: card.name.trim(),
+      description: card.description.trim(),
+      cardType: card.cardType as CardType,
+      destination: card.destination,
+    };
+  });
+  return { name: candidate.name.trim(), cards };
 }
 
 export class GameStore {
@@ -122,8 +191,20 @@ export class GameStore {
   }
 
   newGame(now = new Date()): void {
+    const packs = Object.values(this.state.expansionPacks).map((pack) => ({
+      id: pack.id,
+      name: pack.name,
+      cards: this.expansionCards(pack.id),
+    }));
     this.state = createInitialState(now);
     this.history = [];
+    for (const pack of packs) {
+      this.state = reduceGame(
+        this.state,
+        { type: "IMPORT_EXPANSION_PACK", packId: pack.id, name: pack.name, cards: pack.cards },
+        now,
+      );
+    }
     this.persist();
   }
 
@@ -141,5 +222,40 @@ export class GameStore {
       state: this.state,
     };
     return JSON.stringify(save, null, 2);
+  }
+
+  private expansionCards(packId: string): ExpansionCardDefinition[] {
+    const pack = this.state.expansionPacks[packId];
+    if (!pack) throw new Error("找不到该拓展包");
+    return pack.cardIds
+      .map((id) => this.state.cards[id])
+      .filter((card) => Boolean(card))
+      .map((card) => ({
+        countryId: card!.countryId,
+        name: card!.name,
+        description: card!.description,
+        cardType: card!.type,
+        destination: card!.expansionDestination ?? "deck",
+      }));
+  }
+
+  exportExpansionPack(packId: string, now = new Date()): string {
+    const pack = this.state.expansionPacks[packId];
+    if (!pack) throw new Error("找不到该拓展包");
+    const file: ExpansionPackFile = {
+      format: "qmg-mobile-expansion",
+      version: 1,
+      name: pack.name,
+      exportedAt: now.toISOString(),
+      cards: this.expansionCards(packId),
+    };
+    return JSON.stringify(file, null, 2);
+  }
+
+  importExpansionPack(text: string): string {
+    const parsed = parseExpansionPack(text);
+    const packId = `pack-${Date.now()}-${this.state.nextCustomCardId}`;
+    this.execute({ type: "IMPORT_EXPANSION_PACK", packId, name: parsed.name, cards: parsed.cards });
+    return packId;
   }
 }

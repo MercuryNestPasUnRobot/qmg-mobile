@@ -1527,6 +1527,117 @@ textarea {
   margin: 16px 0;
 }
 
+.expansion-manager {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+}
+
+.expansion-manager > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.expansion-manager > header div,
+.expansion-pack-row > div {
+  display: grid;
+  min-width: 0;
+}
+
+.expansion-manager > header span,
+.expansion-pack-row span {
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.expansion-manager h3 {
+  margin: 0;
+}
+
+.expansion-pack-list {
+  display: grid;
+  gap: 6px;
+}
+
+.expansion-pack-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+  padding: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+}
+
+.expansion-pack-row button {
+  min-height: 32px;
+  padding: 4px 8px;
+}
+
+.danger-link {
+  color: var(--danger);
+}
+
+.game-start-screen {
+  display: grid;
+  width: 100%;
+  min-height: 100dvh;
+  padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right))
+    max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  place-items: center;
+  color: #eef3e9;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(192, 153, 70, 0.2), transparent 30rem),
+    linear-gradient(145deg, #101d17, #26372e);
+}
+
+.game-start-card {
+  display: grid;
+  width: min(420px, 100%);
+  gap: 12px;
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  background: rgba(15, 27, 21, 0.84);
+  box-shadow: 0 22px 55px rgba(0, 0, 0, 0.38);
+}
+
+.game-start-card h1 {
+  margin: 0;
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: clamp(1.7rem, 7vw, 2.5rem);
+}
+
+.game-start-mark {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border-radius: 14px;
+  color: #17231d;
+  background: #d7c98e;
+  font-family: Georgia, serif;
+  font-weight: 900;
+}
+
+.start-settings-placeholder {
+  min-height: 76px;
+  padding: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  color: rgba(238, 243, 233, 0.65);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.start-settings-placeholder p {
+  margin: 5px 0 0;
+  font-size: 0.72rem;
+}
+
 .info-box {
   margin-top: 12px;
   padding: 14px;
@@ -3016,5 +3127,43 @@ textarea {
 
   .custom-card-form .button {
     grid-column: 1 / -1;
+  }
+
+  .game-start-screen {
+    padding: 8px;
+  }
+
+  .game-start-card {
+    grid-template-columns: 58px minmax(0, 1fr) minmax(170px, 0.7fr);
+    grid-template-rows: auto auto 1fr;
+    width: min(720px, 94vw);
+    gap: 5px 12px;
+    padding: 12px;
+  }
+
+  .game-start-mark {
+    grid-row: 1 / 4;
+    align-self: center;
+  }
+
+  .game-start-card .eyebrow {
+    grid-column: 2;
+    margin: 0;
+  }
+
+  .game-start-card h1 {
+    grid-column: 2;
+    font-size: 1.5rem;
+  }
+
+  .start-settings-placeholder {
+    grid-column: 3;
+    grid-row: 1 / 3;
+    min-height: 62px;
+  }
+
+  .game-start-card > .button {
+    grid-column: 2 / 4;
+    min-height: 34px;
   }
 }

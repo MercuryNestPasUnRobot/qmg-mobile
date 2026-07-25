@@ -25,8 +25,9 @@ if (!appElement) throw new Error("App root not found");
 const app: HTMLDivElement = appElement;
 
 const store = new GameStore(window.localStorage);
-const MAP_ZOOM_LEVELS = [640, 760, 880, 1000, 1220, 1440] as const;
+const MAP_ZOOM_LEVELS = [600, 740, 880, 1020, 1160, 1300, 1440] as const;
 let currentView: ViewId = "board";
+let showStartScreen = true;
 let selectedAreaId = "germany";
 let mapZoomIndex = 3;
 let mapWidth: number = MAP_ZOOM_LEVELS[mapZoomIndex]!;
@@ -696,6 +697,7 @@ function renderLog(): string {
 
 function renderSave(): string {
   const state = store.state;
+  const packs = Object.values(state.expansionPacks);
   return `
     <section class="view-section">
       <div class="section-heading">
@@ -719,6 +721,30 @@ function renderSave(): string {
         <button class="button button--wide" data-action="choose-import">导入 JSON 存档</button>
         <input id="import-file" class="visually-hidden" type="file" accept=".json,application/json" />
       </div>
+      <section class="expansion-manager panel">
+        <header>
+          <div><span>自定义内容</span><h3>拓展包管理</h3></div>
+          <button class="button" data-action="choose-pack-import">导入拓展包</button>
+          <input id="pack-import-file" class="visually-hidden" type="file" accept=".json,application/json" />
+        </header>
+        <div class="expansion-pack-list">
+          ${
+            packs.length
+              ? packs
+                  .map(
+                    (pack) => `
+                      <article class="expansion-pack-row">
+                        <div><strong>${escapeHtml(pack.name)}</strong><span>${pack.cardIds.length} 张牌</span></div>
+                        <button data-action="export-pack" data-pack-id="${pack.id}">导出</button>
+                        <button class="danger-link" data-action="remove-pack" data-pack-id="${pack.id}">整包移除</button>
+                      </article>
+                    `,
+                  )
+                  .join("")
+              : '<p class="empty-state">还没有拓展包。手动添加的卡牌会自动归入“本机自定义牌”。</p>'
+          }
+        </div>
+      </section>
       <aside class="info-box">
         <strong>隐私提示</strong>
         <p>JSON 存档包含双方全部手牌。请只在可信设备间传递。</p>
@@ -770,7 +796,28 @@ function renderNavigation(): string {
   `;
 }
 
+function renderStartScreen(): string {
+  return `
+    <main class="game-start-screen">
+      <section class="game-start-card">
+        <span class="game-start-mark" aria-hidden="true">QMG</span>
+        <p class="eyebrow">战场军需官 · 手机版</p>
+        <h1>准备开始</h1>
+        <div class="start-settings-placeholder">
+          <strong>基础设置</strong>
+          <p>设置项目将在后续版本加入。</p>
+        </div>
+        <button class="button button--primary button--wide" data-action="enter-game">进入战局</button>
+      </section>
+    </main>
+  `;
+}
+
 function render(): void {
+  if (showStartScreen) {
+    app.innerHTML = renderStartScreen();
+    return;
+  }
   app.innerHTML = `
     <div class="app-shell">
       ${renderHeader()}
@@ -815,6 +862,12 @@ app.addEventListener("click", (event) => {
   const action = button.dataset.action;
   captureScrollPositions();
 
+  if (action === "enter-game") {
+    showStartScreen = false;
+    currentView = "board";
+    render();
+    return;
+  }
   if (action === "change-view") {
     currentView = button.dataset.view as ViewId;
     render();
@@ -893,7 +946,8 @@ app.addEventListener("click", (event) => {
     unitCountryId = handCountryId;
     selectedCardId = null;
     cardPanelMode = null;
-    showToast("新战局已就绪");
+    showStartScreen = true;
+    render();
     return;
   }
   if (action === "select-hand-country") {
@@ -1072,6 +1126,36 @@ app.addEventListener("click", (event) => {
   }
   if (action === "choose-import") {
     document.querySelector<HTMLInputElement>("#import-file")?.click();
+    return;
+  }
+  if (action === "choose-pack-import") {
+    document.querySelector<HTMLInputElement>("#pack-import-file")?.click();
+    return;
+  }
+  if (action === "export-pack") {
+    const packId = button.dataset.packId ?? "";
+    try {
+      const pack = store.state.expansionPacks[packId];
+      const blob = new Blob([store.exportExpansionPack(packId)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `qmg-expansion-${(pack?.name ?? "pack").replace(/[^\p{L}\p{N}-]+/gu, "-")}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      showToast("拓展包已导出");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "导出失败");
+    }
+    return;
+  }
+  if (action === "remove-pack") {
+    const packId = button.dataset.packId ?? "";
+    const pack = store.state.expansionPacks[packId];
+    if (!pack || !window.confirm(`整包移除「${pack.name}」及其中 ${pack.cardIds.length} 张牌？`)) return;
+    execute({ type: "REMOVE_EXPANSION_PACK", packId }, "拓展包已移除");
+    selectedCardId = null;
+    return;
   }
 });
 
@@ -1122,6 +1206,16 @@ app.addEventListener("change", (event) => {
         showToast("存档导入成功");
       })
       .catch((error: unknown) => showToast(error instanceof Error ? error.message : "导入失败"));
+    return;
+  }
+  if (target.id === "pack-import-file" && target instanceof HTMLInputElement && target.files?.[0]) {
+    target.files[0]
+      .text()
+      .then((text) => {
+        store.importExpansionPack(text);
+        showToast("拓展包已整体加入");
+      })
+      .catch((error: unknown) => showToast(error instanceof Error ? error.message : "拓展包导入失败"));
   }
 });
 
